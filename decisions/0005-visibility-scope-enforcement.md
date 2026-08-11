@@ -75,6 +75,14 @@ and did not occur:
   couples interleaved produced zero cross-couple reads and zero wrong row
   counts (`data/rls-concurrency.sh`).
 
+One further correction came out of reviewing the fix itself. `audit_logs.visibility`
+was given `DEFAULT 'shared_couple'`, which fails open: an audit row written for a
+private entity by code that forgot to set visibility would have been readable by
+the partner. The column now has no default at all, so the omission is a not-null
+violation at write time instead of a disclosure at read time. This ADR already
+said the recoverable error belongs on the private side; the default contradicted
+it.
+
 `users`, `couple_members` and `auth_tokens` remain deliberately without RLS:
 all are read before authentication, when no session variable exists, so a
 fail-closed policy would make sign-in impossible.

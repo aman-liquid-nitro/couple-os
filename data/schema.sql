@@ -513,7 +513,13 @@ CREATE TABLE audit_logs (
     couple_id     uuid REFERENCES couples(id) ON DELETE CASCADE,
     user_id       uuid REFERENCES users(id) ON DELETE SET NULL,
     owner_user_id uuid REFERENCES users(id) ON DELETE SET NULL,
-    visibility    visibility NOT NULL DEFAULT 'shared_couple',
+    -- Deliberately NO DEFAULT. A default of 'shared_couple' fails open: an
+    -- audit row written for a private entity by code that forgot to set
+    -- visibility would become readable by the partner. With no default, that
+    -- same omission is a not-null violation at write time. ADR 0005 puts the
+    -- recoverable error on the private side; an unnoticed disclosure is not
+    -- recoverable.
+    visibility    visibility NOT NULL,
     ai_action_id  uuid REFERENCES ai_actions(id) ON DELETE SET NULL,
     action        text NOT NULL,                  -- create | update | delete | share | …
     entity_type   text NOT NULL,
@@ -524,6 +530,11 @@ CREATE TABLE audit_logs (
 
     CONSTRAINT audit_logs_owner_required_when_private
         CHECK (visibility <> 'private_user' OR owner_user_id IS NOT NULL)
+    -- INVARIANT the application must maintain: an audit row's visibility and
+    -- owner mirror the entity it describes. Writing an audit entry is part of
+    -- the same transaction as the mutation, so the values are always in hand.
+    -- Not enforced by trigger because the entity may already be deleted by the
+    -- time a deletion is audited.
 );
 CREATE INDEX audit_logs_entity ON audit_logs (entity_type, entity_id, created_at DESC);
 

@@ -85,9 +85,10 @@ INSERT INTO memories (couple_id,owner_user_id,visibility,type,content) VALUES
  (:C2, NULL,'shared_couple','semantic','C2 SHARED');
 
 -- An audit row whose after_state quotes a private memory verbatim.
-INSERT INTO audit_logs (couple_id,user_id,owner_user_id,visibility,action,entity_type,after_state)
-VALUES (:C1,:UA,:UA,'private_user','create','memory',
-        '{"content":"C1 PRIVATE-A: necklace for the anniversary"}'::jsonb);
+INSERT INTO audit_logs (couple_id,user_id,owner_user_id,visibility,action,entity_type,entity_id,after_state)
+SELECT :C1, :UA, m.owner_user_id, m.visibility, 'create', 'memory', m.id,
+       jsonb_build_object('content', m.content)
+  FROM memories m WHERE m.content LIKE '%necklace%';
 
 INSERT INTO goals (id,couple_id,visibility,name) VALUES
  ('9111e111-1111-1111-1111-111111111111',:C1,'shared_couple','C1 Goal');
@@ -317,6 +318,33 @@ SELECT t_eq('F3 generic plan still fails closed when nothing is set',
 COMMIT;
 RESET plan_cache_mode;
 DEALLOCATE mem_count;
+
+-- ============================================================================
+-- G. AUDIT VISIBILITY MUST BE STATED, NEVER ASSUMED
+--
+-- audit_logs.before_state/after_state quote entity bodies verbatim, so an audit
+-- row is exactly as sensitive as the row it describes. It therefore has no
+-- default visibility: code that forgets must fail at write time rather than
+-- disclose at read time.
+-- ============================================================================
+SELECT t_blocked('G1 audit row without visibility is rejected at write time',
+  $$INSERT INTO audit_logs (couple_id,user_id,action,entity_type)
+    VALUES ('c1111111-1111-1111-1111-111111111111',
+            '11111111-1111-1111-1111-111111111111','create','memory')$$);
+
+SELECT t_blocked('G2 private audit row without an owner is rejected',
+  $$INSERT INTO audit_logs (couple_id,user_id,visibility,action,entity_type)
+    VALUES ('c1111111-1111-1111-1111-111111111111',
+            '11111111-1111-1111-1111-111111111111','private_user','create','memory')$$);
+
+-- The invariant itself: every audit row describing a memory agrees with that
+-- memory's visibility and owner. Checked as superuser so RLS cannot hide a
+-- mismatch from the assertion.
+SELECT t_eq('G3 audit rows agree with the memory they describe',
+    (SELECT count(*) FROM audit_logs a JOIN memories m ON m.id = a.entity_id
+      WHERE a.entity_type = 'memory'
+        AND (a.visibility IS DISTINCT FROM m.visibility
+             OR a.owner_user_id IS DISTINCT FROM m.owner_user_id)), 0);
 
 -- ----------------------------------------------------------------------------
 \o
