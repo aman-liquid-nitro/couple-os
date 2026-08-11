@@ -1,4 +1,5 @@
 using CoupleOS.Application.Persistence;
+using CoupleOS.Domain.Enums;
 using CoupleOS.Application.Security;
 using CoupleOS.Infrastructure.Persistence;
 using CoupleOS.Infrastructure.Security;
@@ -23,7 +24,9 @@ public static class InfrastructureServiceCollectionExtensions
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(connectionString);
 
-        services.AddDbContext<CoupleOsDbContext>(options => options.UseNpgsql(connectionString));
+        services.AddDbContext<CoupleOsDbContext>(options => options.UseNpgsql(
+            connectionString,
+            npgsql => npgsql.MapEnum<Visibility>("visibility")));
 
         // One instance per request, two interfaces onto it.
         services.AddScoped<CoupleScopeHolder>();

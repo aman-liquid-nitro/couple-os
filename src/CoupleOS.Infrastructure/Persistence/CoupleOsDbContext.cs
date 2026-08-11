@@ -17,6 +17,7 @@ public sealed class CoupleOsDbContext(DbContextOptions<CoupleOsDbContext> option
             e.Property(x => x.CoupleId).HasColumnName("couple_id");
             e.Property(x => x.OwnerUserId).HasColumnName("owner_user_id");
             e.Property(x => x.Content).HasColumnName("content");
+            e.Property(x => x.Visibility).HasColumnName("visibility");
         });
 
         // NO global query filter on couple_id or visibility, and that is a
