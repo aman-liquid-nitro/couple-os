@@ -84,6 +84,60 @@ execution in the provider smoke test rather than trusting it.
 an input that must produce three calls. Run it against any candidate model
 before writing code against it.
 
+## Measured, 2026-08-11
+
+RTX 4070 Laptop, 8 GB VRAM. Same prompt, same tools, same input, `temperature: 0`.
+Both models produced byte-identical tool calls: two `create_shopping_item`, one
+`create_event` carrying `date_expression: "Saturday 8pm"` verbatim.
+
+| run | warm latency | prompt tok/s | gen tok/s | gen tokens | cold load | placement |
+|---|---|---|---|---|---|---|
+| `qwen3.5:4b` | **1.90s** | 2014 | 65.1 | 102 | 6.20s | 100% GPU |
+| `qwen3.5:9b` | 3.27s | 1489 | 36.3 | 102 | 10.53s | 12% CPU / 88% GPU |
+| `qwen3.5:4b`, thinking on | 8.79s | 1658 | 67.1 | 571 | 6.70s | 100% GPU |
+
+**`qwen3.5:4b` is selected.** Identical output, 1.71x faster, fully resident,
+and it leaves VRAM headroom instead of consuming all of it. The larger model
+earns nothing here.
+
+**`"think": false` is mandatory, not tuning.** It cut generated tokens by 82%
+and inference time 4.6x, because the thinking trace was 571 of 673 tokens. The
+extraction path wants a tool call, not an essay about one.
+
+**`OLLAMA_KEEP_ALIVE` matters more than it looks.** A cold load costs 6.2s, paid
+by the first block after any idle period — which is exactly when someone presses
+Process having just written their notes. Keep the model resident during a
+session.
+
+### The cost that actually scales
+
+The smoke test used 3 tools and spent 660 prompt tokens, of which ~515 were the
+tool schemas. Those schemas are identical on every call, and V0 defines 17
+tools. Extrapolating linearly:
+
+```text
+ 3 tools  ->  ~660 prompt tokens  ->  0.33s prompt eval per block
+17 tools  -> ~3060 prompt tokens  ->  1.52s prompt eval per block
+             a 20-block dump      ->  ~62s
+```
+
+Sixty seconds for one Process is not acceptable for the interaction ADR 0009
+describes, and the waste is structural: the same 3000 tokens of schema are
+re-encoded for every block. This is a projection from one measurement, not an
+observation — but it is the right shape to design against before M3.
+
+Two levers, both deferred until measured on real dumps:
+
+- **Filter the tool set per block.** A cheap classification pass with no tool
+  schemas attached picks the 2-3 plausible tools, and only those are sent. This
+  finally gives ADR 0003's `fast`/`deep` split a real justification — the roles
+  differ by prompt shape, not by model, which is convenient now that one model
+  serves both.
+- **Batch blocks per call.** Amortises the schema cost across many blocks and is
+  the larger win by far, at the cost of per-block error isolation: one malformed
+  argument can spoil a batch, and `dump_block_entities` needs each entity
+  attributed to the block that caused it.
+
 ## Consequences
 
 **Easier.** Development needs no key, no budget and no network. The abstraction
