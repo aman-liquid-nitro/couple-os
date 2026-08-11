@@ -1,0 +1,19 @@
+<Project>
+
+  <!-- Applies to every project in the repository. Settings live here rather
+       than in nine .csproj files that would drift apart. -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+
+    <!-- A warning ignored today is a bug shipped next month. This project
+         stores private data for two people; the compiler is the cheapest
+         reviewer available. -->
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+  </PropertyGroup>
+
+</Project>

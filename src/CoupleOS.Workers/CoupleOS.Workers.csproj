@@ -1,9 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk.Worker">
 
   <PropertyGroup>
-    <TargetFramework>net10.0</TargetFramework>
-    <Nullable>enable</Nullable>
-    <ImplicitUsings>enable</ImplicitUsings>
     <UserSecretsId>dotnet-CoupleOS.Workers-377f82aa-5b2a-41e8-af61-62a7ba93135d</UserSecretsId>
   </PropertyGroup>
 

@@ -1,31 +1,21 @@
-html {
-  font-size: 14px;
+/* Deliberately small. ADR 0010: four screens, none of them rich. */
+:root {
+    --fg: #1a1a1a; --bg: #fbfbfa; --muted: #6b6b6b;
+    --line: #e3e3e0; --accent: #2f6f4f;
 }
-
-@media (min-width: 768px) {
-  html {
-    font-size: 16px;
-  }
-}
-
-.btn:focus, .btn:active:focus, .btn-link.nav-link:focus, .form-control:focus, .form-check-input:focus {
-  box-shadow: 0 0 0 0.1rem white, 0 0 0 0.25rem #258cfb;
-}
-
-html {
-  position: relative;
-  min-height: 100%;
-}
-
+* { box-sizing: border-box; }
 body {
-  margin-bottom: 60px;
+    margin: 0; padding: 0; color: var(--fg); background: var(--bg);
+    font: 16px/1.55 -apple-system, "Segoe UI", Roboto, sans-serif;
 }
-
-.form-floating > .form-control-plaintext::placeholder, .form-floating > .form-control::placeholder {
-  color: var(--bs-secondary-color);
-  text-align: end;
-}
-
-.form-floating > .form-control-plaintext:focus::placeholder, .form-floating > .form-control:focus::placeholder {
-  text-align: start;
-}
+header { border-bottom: 1px solid var(--line); padding: 0.9rem 1.25rem; }
+.brand { font-weight: 600; text-decoration: none; color: var(--fg); }
+main { max-width: 46rem; margin: 0 auto; padding: 1.5rem 1.25rem 4rem; }
+textarea { width: 100%; min-height: 18rem; padding: 0.75rem; font-family: ui-monospace, monospace;
+           font-size: 0.95rem; border: 1px solid var(--line); border-radius: 6px; background: #fff; }
+button { padding: 0.55rem 1.1rem; border: 0; border-radius: 6px;
+         background: var(--accent); color: #fff; font-size: 1rem; cursor: pointer; }
+button:disabled { opacity: 0.55; cursor: default; }
+.muted { color: var(--muted); }
+ul.report { list-style: none; padding: 0; }
+ul.report li { padding: 0.45rem 0; border-bottom: 1px solid var(--line); }
