@@ -1,0 +1,82 @@
+# ============================================================================
+# Couple OS — local development stack
+#
+#   docker compose up -d                 database + mail catcher
+#   docker compose --profile app up -d   the above plus the API (from M0 onward)
+#
+# The database initialises itself from data/schema.sql on first start only.
+# To re-apply a changed schema:  docker compose down -v && docker compose up -d
+# ============================================================================
+
+services:
+  db:
+    image: pgvector/pgvector:pg16
+    container_name: coupleos-db
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-coupleos}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-dev}
+      # Consumed by 02-app-role.sh to create the non-superuser role the
+      # application connects as. RLS is bypassed by superusers, so the
+      # application must never connect as postgres (ADR 0005).
+      APP_DB_USER: ${APP_DB_USER:-app_user}
+      APP_DB_PASSWORD: ${APP_DB_PASSWORD:-dev_app}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - coupleos-pgdata:/var/lib/postgresql/data
+      # Run in filename order on first start, against POSTGRES_DB.
+      - ./data/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+      - ./data/docker-init-app-role.sh:/docker-entrypoint-initdb.d/02-app-role.sh:ro
+      # The RLS harnesses, so they can be run inside the container without
+      # psql or pgbench installed on the host.
+      - ./data:/repo/data:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-coupleos}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  # Magic links (ADR 0007) are printed here rather than sent. Web UI on 1080.
+  maildev:
+    image: maildev/maildev:2.1.0
+    container_name: coupleos-maildev
+    ports:
+      - "${MAILDEV_UI_PORT:-1080}:1080"
+      - "${MAILDEV_SMTP_PORT:-1025}:1025"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:1080/healthz || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Enabled from M0 onward, once the project exists:
+  #   docker compose --profile app up -d
+  api:
+    profiles: ["app"]
+    build:
+      context: .
+      dockerfile: src/CoupleOS.Api/Dockerfile
+    container_name: coupleos-api
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ASPNETCORE_URLS: http://+:8080
+      # Note the app role, not postgres. Connecting as a superuser would
+      # silently disable every policy in data/schema.sql.
+      ConnectionStrings__Default: >-
+        Host=db;Port=5432;Database=${POSTGRES_DB:-coupleos};
+        Username=${APP_DB_USER:-app_user};Password=${APP_DB_PASSWORD:-dev_app}
+      Smtp__Host: maildev
+      Smtp__Port: "1025"
+      Anthropic__ApiKey: ${ANTHROPIC_API_KEY:-}
+    ports:
+      - "${API_PORT:-8080}:8080"
+    depends_on:
+      db:
+        condition: service_healthy
+      maildev:
+        condition: service_started
+
+volumes:
+  coupleos-pgdata:

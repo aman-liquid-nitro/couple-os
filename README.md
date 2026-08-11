@@ -79,11 +79,47 @@ Two contradictions in the original specification are resolved by these:
 ADR 0009 supersedes §7's single chat inbox, and ADR 0010 supersedes §41's
 Next.js frontend for V0.
 
+## Running it
+
+Requires Docker. No .NET is needed until Milestone M0 creates the projects.
+
+```bash
+cp .env.example .env          # .env is gitignored; never commit it
+docker compose up -d          # postgres + maildev
+```
+
+The database builds itself from `data/schema.sql` on first start and creates
+the non-superuser application role. Verify row-level security actually holds:
+
+```bash
+docker compose exec -u postgres db \
+  psql -d coupleos -v ON_ERROR_STOP=1 -f /repo/data/rls-tests.sql
+
+docker compose exec -u postgres -e PGDATABASE=coupleos db \
+  bash /repo/data/rls-concurrency.sh
+```
+
+Expect 33 assertions passing, then `PASS — 1600 interleaved transactions,
+0 cross-couple leaks`. Both exit non-zero on failure, and both are verified to
+fail when a policy is removed, so a green run means something.
+
+Schema changed? The init scripts only run on an empty volume:
+
+```bash
+docker compose down -v && docker compose up -d
+```
+
+Magic-link emails are caught by maildev at http://localhost:1080 — nothing is
+sent anywhere real in development.
+
 ## Stack
 
 ```text
 ASP.NET Core · Razor Pages + htmx · PostgreSQL 16 + pgvector · EF Core
 Anthropic (fast + deep roles) behind ILLMProvider · docker compose
+
+The application connects as a non-superuser role. A superuser connection
+bypasses every row-level security policy and silently voids ADR 0005.
 ```
 
 ---
