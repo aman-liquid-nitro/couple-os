@@ -34,8 +34,51 @@ public sealed class RlsFixture
         lock (Gate)
         {
             if (_seeded) return;
+            GuardAgainstPrivilegedTestRole();
             Seed();
             _seeded = true;
+        }
+    }
+
+    /// <summary>
+    /// Refuses to run if the application connection is privileged.
+    ///
+    /// Superusers, table owners and roles with BYPASSRLS ignore every policy in
+    /// data/schema.sql. Tests run under such a role still execute, still read
+    /// rows, and still report green for the two assertions that do not depend on
+    /// isolation — while proving nothing about the thing they exist to prove.
+    ///
+    /// This happened: after pointing COUPLEOS_APP_DB at the admin role to verify
+    /// the suite could fail, the variable outlived the experiment and a later run
+    /// silently measured nothing. A test suite that cannot tell it is being lied
+    /// to is not worth much, so it now refuses to start.
+    /// </summary>
+    private static void GuardAgainstPrivilegedTestRole()
+    {
+        using var conn = new NpgsqlConnection(AppConnectionString);
+        conn.Open();
+
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText =
+            "SELECT current_user, rolsuper, rolbypassrls FROM pg_roles WHERE rolname = current_user";
+
+        using var reader = cmd.ExecuteReader();
+        if (!reader.Read())
+        {
+            throw new InvalidOperationException("Could not determine the current database role.");
+        }
+
+        var role = reader.GetString(0);
+        var isSuperuser = reader.GetBoolean(1);
+        var bypassesRls = reader.GetBoolean(2);
+
+        if (isSuperuser || bypassesRls)
+        {
+            throw new InvalidOperationException(
+                $"The row-level security tests are connected as '{role}', which bypasses RLS " +
+                $"(superuser={isSuperuser}, bypassrls={bypassesRls}). Every isolation assertion " +
+                "would be meaningless. Point COUPLEOS_APP_DB at the non-superuser application " +
+                "role — in PowerShell: Remove-Item env:COUPLEOS_APP_DB");
         }
     }
 
