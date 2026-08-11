@@ -280,6 +280,44 @@ SELECT t_eq('E5 every table with couple_id has RLS, except the documented three'
         AND c.relname NOT IN ('users','couple_members','auth_tokens','expense_categories')
     ), 0);
 
+-- ============================================================================
+-- F. PREPARED STATEMENTS AND GENERIC PLANS
+--
+-- Npgsql prepares statements, and after five executions PostgreSQL may switch
+-- to a generic plan. If the RLS predicate were bound at plan time rather than
+-- execution time, a connection that served couple A would keep applying A's
+-- filter for couple B. force_generic_plan makes that the guaranteed case
+-- instead of a rare one.
+-- ============================================================================
+SET plan_cache_mode = force_generic_plan;
+PREPARE mem_count AS SELECT count(*) FROM memories;
+
+BEGIN;
+SET LOCAL ROLE app_user;
+SET LOCAL app.current_couple_id = 'c1111111-1111-1111-1111-111111111111';
+SET LOCAL app.current_user_id   = '11111111-1111-1111-1111-111111111111';
+-- Six executions: enough to force the generic plan to be built and reused.
+EXECUTE mem_count; EXECUTE mem_count; EXECUTE mem_count;
+EXECUTE mem_count; EXECUTE mem_count;
+SELECT t_eq('F1 generic plan, partner A', (SELECT count(*) FROM memories), 2);
+COMMIT;
+
+BEGIN;
+SET LOCAL ROLE app_user;
+SET LOCAL app.current_couple_id = 'c2222222-2222-2222-2222-222222222222';
+SET LOCAL app.current_user_id   = '33333333-3333-3333-3333-333333333333';
+SELECT t_eq('F2 same prepared statement does not reuse the previous couple filter',
+            (SELECT count(*) FROM memories), 1);
+COMMIT;
+
+BEGIN;
+SET LOCAL ROLE app_user;
+SELECT t_eq('F3 generic plan still fails closed when nothing is set',
+            (SELECT count(*) FROM memories), 0);
+COMMIT;
+RESET plan_cache_mode;
+DEALLOCATE mem_count;
+
 -- ----------------------------------------------------------------------------
 \o
 \echo ''

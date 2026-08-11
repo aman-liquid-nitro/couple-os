@@ -82,12 +82,21 @@ SELECT set_config('app.current_user_id',   @userId,   true),
 --                                          ↑ true = transaction-local
 ```
 
-**RLS proven before anything is built on it** — `data/rls-tests.sql` already
-exists and passes: 27 assertions run against PostgreSQL 16 covering read
-isolation, the write path, connection reuse and privilege escalation. M0's job
-is to port it to `CoupleOS.IntegrationTests` as xUnit and add the concurrency
-dimension SQL cannot express — 100 interleaved requests across a pooled
-connection. Three defects it already caught are fixed in `data/schema.sql`:
+**RLS is proven, not assumed.** Both halves of M0's original question are
+already answered against PostgreSQL 16:
+
+- `data/rls-tests.sql` — 30 assertions: read isolation, write path, connection
+  reuse, prepared statements under `force_generic_plan`, privilege escalation.
+- `data/rls-concurrency.sh` — 1600 transactions, 16 reused connections,
+  `-M prepared` (Npgsql's mode), both couples interleaved 50/50. Zero leaks.
+  This is M0's stated exit criterion at 16x the required volume.
+
+Both harnesses are verified to fail when protection is removed, so a green run
+means something. M0's remaining job is to port them to
+`CoupleOS.IntegrationTests` and confirm EF Core's query filters compose with
+these policies rather than fighting them.
+
+Three defects the harness caught are fixed in `data/schema.sql`:
 `audit_logs` leaked private memory bodies through `after_state`, and
 `goal_transactions` and `plan_items` leaked free text to any couple because
 "reachable only via a protected parent" is untrue of a direct SELECT.

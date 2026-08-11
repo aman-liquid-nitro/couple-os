@@ -63,6 +63,18 @@ above did not:
    COMMIT and exposed the previous couple's rows to the next transaction on the
    same connection.
 
+Two failure modes that could have invalidated the whole approach were tested
+and did not occur:
+
+- **Generic query plans.** Npgsql prepares statements, so a plan built while
+  serving one couple is reused for the next. Under `force_generic_plan` — the
+  guaranteed-worst case rather than the occasional one — the same prepared
+  statement returned 2 rows for partner A, 1 for an unrelated couple and 0 with
+  nothing set. The policy is evaluated per execution, not bound at plan time.
+- **Concurrency.** 1600 transactions across 16 reused connections with both
+  couples interleaved produced zero cross-couple reads and zero wrong row
+  counts (`data/rls-concurrency.sh`).
+
 `users`, `couple_members` and `auth_tokens` remain deliberately without RLS:
 all are read before authentication, when no session variable exists, so a
 fail-closed policy would make sign-in impossible.
