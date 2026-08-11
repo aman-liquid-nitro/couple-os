@@ -10,6 +10,13 @@
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
+    <!-- Pinned explicitly, and NOT PrivateAssets, so consumers of this assembly
+         resolve the same EF Core version it was compiled against.
+         Without these, Design (PrivateAssets=all) pulled EF Core 10.0.10 for
+         this project's compile while downstream projects saw only the Npgsql
+         provider's 10.0.4, producing CS1705. -->
+    <PackageReference Include="Microsoft.EntityFrameworkCore" Version="10.0.10" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.10" />
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.3" />
   </ItemGroup>
 
