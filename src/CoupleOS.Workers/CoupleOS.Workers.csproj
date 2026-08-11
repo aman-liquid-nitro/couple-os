@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk.Worker">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UserSecretsId>dotnet-CoupleOS.Workers-377f82aa-5b2a-41e8-af61-62a7ba93135d</UserSecretsId>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.10" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\CoupleOS.Application\CoupleOS.Application.csproj" />
+    <ProjectReference Include="..\CoupleOS.Infrastructure\CoupleOS.Infrastructure.csproj" />
+  </ItemGroup>
+</Project>

@@ -1,0 +1,15 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/CoupleOS.AI/CoupleOS.AI.csproj" />
+    <Project Path="src/CoupleOS.Api/CoupleOS.Api.csproj" />
+    <Project Path="src/CoupleOS.Application/CoupleOS.Application.csproj" />
+    <Project Path="src/CoupleOS.Domain/CoupleOS.Domain.csproj" />
+    <Project Path="src/CoupleOS.Infrastructure/CoupleOS.Infrastructure.csproj" />
+    <Project Path="src/CoupleOS.Workers/CoupleOS.Workers.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/CoupleOS.AITests/CoupleOS.AITests.csproj" />
+    <Project Path="tests/CoupleOS.IntegrationTests/CoupleOS.IntegrationTests.csproj" />
+    <Project Path="tests/CoupleOS.UnitTests/CoupleOS.UnitTests.csproj" />
+  </Folder>
+</Solution>
