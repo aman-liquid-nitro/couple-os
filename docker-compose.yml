@@ -69,6 +69,12 @@ services:
         Username=${APP_DB_USER:-app_user};Password=${APP_DB_PASSWORD:-dev_app}
       Smtp__Host: maildev
       Smtp__Port: "1025"
+      # ADR 0011: Ollama for development, Anthropic reserved for the
+      # validation run. Provider is chosen by config, not by code.
+      Llm__Provider: ${LLM_PROVIDER:-ollama}
+      Llm__Ollama__BaseUrl: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+      Llm__Roles__Fast__Model: ${LLM_FAST_MODEL:-qwen2.5:3b-instruct}
+      Llm__Roles__Deep__Model: ${LLM_DEEP_MODEL:-qwen2.5:7b-instruct}
       Anthropic__ApiKey: ${ANTHROPIC_API_KEY:-}
     ports:
       - "${API_PORT:-8080}:8080"
@@ -77,6 +83,11 @@ services:
         condition: service_healthy
       maildev:
         condition: service_started
+    # Ollama runs on the host, not in the stack — models are large and are
+    # better managed by `ollama pull` than by a volume. Docker Desktop provides
+    # host.docker.internal; this line adds the same name on native Linux.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
 
 volumes:
   coupleos-pgdata:

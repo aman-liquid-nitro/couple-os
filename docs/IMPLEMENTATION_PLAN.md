@@ -12,7 +12,7 @@ Scope: [V0_SCOPE.md](./V0_SCOPE.md). Governed by ADRs 0001–0009.
 |---|---|
 | Backend | ASP.NET Core, as SPEC.md §41 and ADR 0001 specify. Reopened at the implementation boundary and re-confirmed. |
 | Frontend | Razor Pages + htmx, one deployable. Supersedes §41's Next.js for V0 — see ADR 0010. |
-| LLM provider | Anthropic for `fast` and `deep` (ADR 0003). `embed` unconfigured; retrieval is lexical in V0. |
+| LLM provider | Ollama locally for development (ADR 0011); Anthropic for the validation run once a key exists. Selected by configuration. `embed` unconfigured; retrieval is lexical in V0. |
 | Deployment | `docker compose` locally throughout. Where the live test runs is decided at M5, not before. |
 | Delivery | Work lands on feature branches, written directly to the repo and reviewed by `git diff`. Nothing reaches `main` without an explicit merge. |
 | First slice | Row-level security through EF Core, before anything is built on top of it. |

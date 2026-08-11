@@ -39,6 +39,11 @@ Configuration maps role to provider and model, so switching providers is a confi
 }
 ```
 
+> **Amended by ADR 0011.** Development runs on a local Ollama model; the
+> Anthropic selection below is reserved for the validation run, when a key
+> exists. The mechanism is unchanged — this is a configuration change, which
+> is the whole point of the abstraction.
+
 **V0 uses Anthropic for both reasoning roles** — `fast` and `deep` — because the
 whole design leans on tool-calling and instruction-following, and the tool layer
 (ADR 0004) is only as safe as the model's willingness to stay inside it. `embed`
