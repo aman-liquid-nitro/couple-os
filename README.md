@@ -2,35 +2,78 @@
 
 A private, intelligent memory and coordination layer for a couple's everyday life.
 
-**Status:** Specification complete. Not yet implemented. First target is V0 (spec §36).
+**Status:** Specification and architecture complete. Implementation not started.
+**Next target:** V0 (see [docs/V0_SCOPE.md](./docs/V0_SCOPE.md)) — not the roadmap.
+
+## Start here
+
+| Read | For |
+|---|---|
+| [docs/V0_SCOPE.md](./docs/V0_SCOPE.md) | What is actually being built first, and what is cut |
+| [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md) | Shape of the system, domain model, request pipeline |
+| [docs/TOOLS.md](./docs/TOOLS.md) | Contracts for the seven V0 tools |
+| [decisions/](./decisions) | Why things are the way they are (ADRs 0001–0008) |
+| [docs/SPEC.md](./docs/SPEC.md) | The original full specification |
 
 ## Where things live
 
 | Folder | Contents |
 |---|---|
-| `docs/` | Canonical specification and architecture documents |
+| `docs/` | Specification, architecture, scope, tool contracts |
+| `decisions/` | Architecture Decision Records |
+| `data/` | Reference schema, AI evaluation dataset |
 | `product/` | User stories, flows, module briefs, UI copy |
 | `design/` | Wireframes, dashboard mockups, visual design |
-| `data/` | Schema drafts, seed data, AI evaluation datasets |
 | `research/` | Model/provider comparisons, cost analysis, prior art |
-| `decisions/` | Architecture Decision Records (ADRs) |
 | `assets/` | Images, exports, screenshots |
 
-## Start here
+## How capture works
 
-- [docs/SPEC.md](./docs/SPEC.md) — full product and technical specification
+Two surfaces. **Where you write determines who can see it** — the AI never guesses.
+
+```text
+shared.md            both partners write · append-only log · batch Process
+                     → everything here is shared
+
+private chat         one thread each · conversational · surprises, gifts, plans
+                     → everything here is private
+```
+
+Processing a dump returns a **change report**: what was created, updated,
+superseded, and what failed. Corrections are new lines, never edits.
+
+See [ADR 0009](./decisions/0009-capture-surfaces-split-by-scope.md).
 
 ## Core principle
 
 Capture → Understand → Remember → Organize → Act → Learn
 
-## Non-negotiables (spec §52, §56)
+## Non-negotiables
 
-1. The LLM is never the source of truth for structured data.
-2. All calculations are deterministic application code, not LLM arithmetic.
-3. Every record carries a visibility scope; private data never enters shared context.
-4. Never claim an action succeeded when the tool failed.
-5. Prove the core natural-language interaction is useful before building outward.
+1. The LLM is never the source of truth for structured data (SPEC.md §56.6).
+2. All calculations are deterministic application code, never LLM arithmetic (§56.7).
+3. Every record carries a visibility scope, inherited from its capture surface and enforced by the database (ADR 0005, 0009).
+4. Never claim an action succeeded when the tool failed (§46).
+5. Prove the core interaction is useful before building outward (§56.1).
+
+## Decisions taken
+
+| ADR | Decision |
+|---|---|
+| [0001](./decisions/0001-modular-monolith.md) | Modular monolith, one deployable, one database |
+| [0002](./decisions/0002-postgresql-pgvector.md) | PostgreSQL + pgvector; no dedicated vector database |
+| [0003](./decisions/0003-llm-provider-abstraction-and-model-routing.md) | Provider abstraction with role-based routing (`fast`/`deep`/`embed`/`local`) |
+| [0004](./decisions/0004-tool-layer-as-sole-llm-write-path.md) | The tool layer is the only path from LLM to state |
+| [0005](./decisions/0005-visibility-scope-enforcement.md) | Three-value visibility, enforced by row-level security |
+| [0006](./decisions/0006-memory-taxonomy-and-confidence.md) | Memory taxonomy, confidence, and the inference boundary |
+| [0007](./decisions/0007-authentication-magic-links.md) | Magic-link authentication, no passwords |
+| [0008](./decisions/0008-notification-usefulness-threshold.md) | Notification scoring threshold and confirmation tiers |
+| [0009](./decisions/0009-capture-surfaces-split-by-scope.md) | Two capture surfaces, split by visibility scope |
+
+Two contradictions in the original specification are resolved by these:
+`PRIVATE`/`SHARED` versus the three-scope model (§9 vs §28) in ADR 0005, and
+`search_memory` depending on a later milestone (§36 vs §54) in `docs/V0_SCOPE.md`.
+ADR 0009 supersedes §7's single chat inbox.
 
 ---
 
