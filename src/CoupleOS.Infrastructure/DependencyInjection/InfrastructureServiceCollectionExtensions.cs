@@ -1,4 +1,5 @@
 using CoupleOS.Application.Persistence;
+using CoupleOS.Application.Tools;
 using CoupleOS.Domain.Enums;
 using CoupleOS.Application.Security;
 using CoupleOS.Infrastructure.Persistence;
@@ -26,7 +27,9 @@ public static class InfrastructureServiceCollectionExtensions
 
         services.AddDbContext<CoupleOsDbContext>(options => options.UseNpgsql(
             connectionString,
-            npgsql => npgsql.MapEnum<Visibility>("visibility")));
+            npgsql => npgsql
+                .MapEnum<Visibility>("visibility")
+                .MapEnum<ActionOutcome>("action_outcome")));
 
         // One instance per request, two interfaces onto it.
         services.AddScoped<CoupleScopeHolder>();
@@ -34,6 +37,9 @@ public static class InfrastructureServiceCollectionExtensions
         services.AddScoped<ICoupleScopeSetter>(sp => sp.GetRequiredService<CoupleScopeHolder>());
 
         services.AddScoped<IScopedUnitOfWork, CoupleScopedUnitOfWork>();
+
+        services.AddScoped<IShoppingItemWriter, ShoppingItemWriter>();
+        services.AddScoped<IToolAuditSink, AiActionAuditSink>();
 
         return services;
     }

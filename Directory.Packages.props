@@ -25,6 +25,10 @@
     <PackageVersion Include="Microsoft.Extensions.Configuration.Abstractions" Version="10.0.10" />
   </ItemGroup>
 
+  <ItemGroup Label="Composition">
+    <PackageVersion Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.10" />
+  </ItemGroup>
+
   <ItemGroup Label="Hosting">
     <PackageVersion Include="Microsoft.Extensions.Hosting" Version="10.0.10" />
   </ItemGroup>
