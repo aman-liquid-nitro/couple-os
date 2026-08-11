@@ -4,12 +4,14 @@ A private, intelligent memory and coordination layer for a couple's everyday lif
 
 **Status:** Specification and architecture complete. Implementation not started.
 **Next target:** V0 (see [docs/V0_SCOPE.md](./docs/V0_SCOPE.md)) — not the roadmap.
+**Next step:** M0, the walking skeleton — see [docs/IMPLEMENTATION_PLAN.md](./docs/IMPLEMENTATION_PLAN.md).
 
 ## Start here
 
 | Read | For |
 |---|---|
 | [docs/V0_SCOPE.md](./docs/V0_SCOPE.md) | What is actually being built first, and what is cut |
+| [docs/IMPLEMENTATION_PLAN.md](./docs/IMPLEMENTATION_PLAN.md) | How V0 gets built — milestones, exit criteria, risks |
 | [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md) | Shape of the system, domain model, request pipeline |
 | [docs/TOOLS.md](./docs/TOOLS.md) | Contracts for the seven V0 tools |
 | [decisions/](./decisions) | Why things are the way they are (ADRs 0001–0008) |
@@ -69,11 +71,20 @@ Capture → Understand → Remember → Organize → Act → Learn
 | [0007](./decisions/0007-authentication-magic-links.md) | Magic-link authentication, no passwords |
 | [0008](./decisions/0008-notification-usefulness-threshold.md) | Notification scoring threshold and confirmation tiers |
 | [0009](./decisions/0009-capture-surfaces-split-by-scope.md) | Two capture surfaces, split by visibility scope |
+| [0010](./decisions/0010-server-rendered-ui-for-v0.md) | Server-rendered UI with htmx for V0 |
 
 Two contradictions in the original specification are resolved by these:
 `PRIVATE`/`SHARED` versus the three-scope model (§9 vs §28) in ADR 0005, and
 `search_memory` depending on a later milestone (§36 vs §54) in `docs/V0_SCOPE.md`.
-ADR 0009 supersedes §7's single chat inbox.
+ADR 0009 supersedes §7's single chat inbox, and ADR 0010 supersedes §41's
+Next.js frontend for V0.
+
+## Stack
+
+```text
+ASP.NET Core · Razor Pages + htmx · PostgreSQL 16 + pgvector · EF Core
+Anthropic (fast + deep roles) behind ILLMProvider · docker compose
+```
 
 ---
 

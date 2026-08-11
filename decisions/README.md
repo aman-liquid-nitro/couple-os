@@ -13,6 +13,7 @@ One file per decision: `NNNN-short-title.md`.
 | [0007](./0007-authentication-magic-links.md) | Magic-link authentication for V1 | Accepted |
 | [0008](./0008-notification-usefulness-threshold.md) | Notification usefulness threshold and confirmation tiers | Accepted |
 | [0009](./0009-capture-surfaces-split-by-scope.md) | Two capture surfaces, split by visibility scope | Accepted |
+| [0010](./0010-server-rendered-ui-for-v0.md) | Server-rendered UI with htmx for V0 | Accepted |
 
 ## Template
 

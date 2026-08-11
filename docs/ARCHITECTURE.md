@@ -11,11 +11,12 @@ A modular monolith (ADR 0001). One deployable, one database, module boundaries e
 
 ```text
                     ┌─────────────────────────┐
-                    │   Next.js / React / TS  │
+                    │  Browser · htmx, no SPA │
                     └────────────┬────────────┘
-                                 │ HTTPS, cookie session
+                                 │ HTTPS, cookie session, no CORS
                     ┌────────────▼────────────┐
-                    │     CoupleOS.Api        │  controllers, auth, DTOs
+                    │     CoupleOS.Api        │  Razor Pages, auth, view models
+                    │     (ADR 0010)          │  JSON endpoints for later clients
                     └────────────┬────────────┘
                                  │
                     ┌────────────▼────────────┐
@@ -235,8 +236,11 @@ The last row matters most. "Never claim an action happened if the tool failed" i
 ## 7. Deployment
 
 ```text
-docker compose:  api  ·  web  ·  postgres  ·  maildev (dev only)
+docker compose:  api  ·  postgres  ·  maildev (dev only)
 ```
+
+One application container, not two — the UI is served by the API (ADR 0010).
+No Node in the production image.
 
 Single VPS. Managed Postgres or a volume-backed container. Nightly `pg_dump` to off-site object storage, encrypted — this database holds the only copy of things the couple has told no one else. Restore is tested, not assumed.
 

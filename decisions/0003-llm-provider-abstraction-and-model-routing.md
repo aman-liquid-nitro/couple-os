@@ -39,6 +39,11 @@ Configuration maps role to provider and model, so switching providers is a confi
 }
 ```
 
+**V0 uses Anthropic for both reasoning roles** — `fast` and `deep` — because the
+whole design leans on tool-calling and instruction-following, and the tool layer
+(ADR 0004) is only as safe as the model's willingness to stay inside it. `embed`
+stays unconfigured in V0; retrieval is lexical until Milestone 4 (ADR 0002).
+
 Every call records provider, model, role, latency, token counts and estimated cost to `ai_actions`, satisfying §49 and §50's per-couple cost tracking.
 
 ## Consequences
