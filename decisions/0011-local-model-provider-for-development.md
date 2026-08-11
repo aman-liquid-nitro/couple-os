@@ -32,7 +32,7 @@ the existing interface.
 "llm": {
   "roles": {
     "fast":  { "provider": "ollama", "model": "qwen2.5:3b-instruct",  "maxTokens": 1024 },
-    "deep":  { "provider": "ollama", "model": "qwen2.5:7b-instruct",  "maxTokens": 4096 }
+    "deep":  { "provider": "ollama", "model": "qwen3.5:9b",  "maxTokens": 4096 }
   },
   "ollama": { "baseUrl": "http://host.docker.internal:11434" }
 }
@@ -51,6 +51,38 @@ against whichever provider is configured. Running it against a local model now
 establishes a floor; running it against Anthropic later measures the gap. A V0
 that underperforms tells us which of the two failed, instead of leaving it
 ambiguous.
+
+## Hardware constraints on this machine
+
+An RTX 4070 Laptop with 8 GB of VRAM, minus what Windows takes for the desktop.
+Three consequences, all measured against that number rather than assumed:
+
+**One model serves both roles.** A 7-9B model at Q4 is 4.5-6.6 GB. Holding a
+separate small model for `fast` and a larger one for `deep` does not fit, so
+Ollama would evict and reload between them — and `fast` runs once per block
+while `deep` runs rarely, so most calls would pay a reload. One model is faster
+than two here despite being the larger choice. Split only if measurement says to.
+
+**`num_ctx` must be set explicitly on every request.** Ollama's default context
+is far below what these models support, and exceeding it does not error — it
+truncates. In this system that is the worst possible failure shape: the tail of
+a long `shared.md` is cut off, blocks are never seen, and the change report
+confidently lists what it did process. The user sees missing entries and no
+error, and concludes the extraction is unreliable. An integration test must feed
+an oversized block and assert the system chunks or refuses rather than silently
+dropping it.
+
+**Ollama version is a correctness dependency, not a preference.** A known defect
+had `qwen3.5:9b` emit tool calls as prose instead of invoking them
+(ollama/ollama#14745, present in 0.17.7, fixed by #15022). ADR 0004 makes the
+tool layer the sole write path, so a model that describes a call rather than
+making one writes nothing at all — silently, with a change report showing no
+entities created. Pin a floor version in the README and assert tool-call
+execution in the provider smoke test rather than trusting it.
+
+`data/ollama-toolcall-smoke.json` is that smoke test: two real tool schemas and
+an input that must produce three calls. Run it against any candidate model
+before writing code against it.
 
 ## Consequences
 

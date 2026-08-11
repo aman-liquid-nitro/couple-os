@@ -1,0 +1,42 @@
+{
+  "model": "qwen3.5:9b",
+  "stream": false,
+  "options": { "num_ctx": 4096, "temperature": 0 },
+  "messages": [
+    { "role": "system",
+      "content": "You convert a person's note into structured actions. You MUST act only by calling the provided tools. Never describe a tool call in prose. If the note contains nothing actionable, call no tools." },
+    { "role": "user",
+      "content": "we're out of detergent and coffee. also dinner at Priya's parents on Saturday 8pm" }
+  ],
+  "tools": [
+    { "type": "function",
+      "function": {
+        "name": "create_shopping_item",
+        "description": "Add one item to the couple's shopping list. Call once per distinct item.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "name":     { "type": "string", "description": "The item, singular, lowercase" },
+            "quantity": { "type": "string", "description": "Optional quantity as written" }
+          },
+          "required": ["name"]
+        }
+      }
+    },
+    { "type": "function",
+      "function": {
+        "name": "create_event",
+        "description": "Create a calendar event.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "title":     { "type": "string" },
+            "starts_at": { "type": "string", "description": "ISO 8601" },
+            "location":  { "type": "string" }
+          },
+          "required": ["title", "starts_at"]
+        }
+      }
+    }
+  ]
+}

@@ -73,8 +73,10 @@ services:
       # validation run. Provider is chosen by config, not by code.
       Llm__Provider: ${LLM_PROVIDER:-ollama}
       Llm__Ollama__BaseUrl: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
-      Llm__Roles__Fast__Model: ${LLM_FAST_MODEL:-qwen2.5:3b-instruct}
-      Llm__Roles__Deep__Model: ${LLM_DEEP_MODEL:-qwen2.5:7b-instruct}
+      Llm__Roles__Fast__Model: ${LLM_FAST_MODEL:-qwen3.5:9b}
+      Llm__Roles__Deep__Model: ${LLM_DEEP_MODEL:-qwen3.5:9b}
+      # Never leave this to Ollama's default — it truncates silently (ADR 0011).
+      Llm__Ollama__NumCtx: ${LLM_NUM_CTX:-4096}
       Anthropic__ApiKey: ${ANTHROPIC_API_KEY:-}
     ports:
       - "${API_PORT:-8080}:8080"
