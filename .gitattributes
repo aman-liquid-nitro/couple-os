@@ -1,0 +1,21 @@
+# Normalise line endings in the repository to LF.
+* text=auto
+
+# These are executed INSIDE Linux containers. A CRLF here makes the shebang
+# read as "/bin/bash\r", the interpreter is not found, the Postgres init script
+# fails, and the database container exits on startup taking the whole stack
+# with it. Observed exactly that on 2026-08-11.
+*.sh   text eol=lf
+*.sql  text eol=lf
+*.yml  text eol=lf
+*.yaml text eol=lf
+
+# Windows-native scripts keep CRLF.
+*.cmd  text eol=crlf
+*.bat  text eol=crlf
+*.ps1  text eol=crlf
+
+# Never touch these.
+*.png  binary
+*.jpg  binary
+*.pdf  binary
