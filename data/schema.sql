@@ -503,17 +503,27 @@ CREATE UNIQUE INDEX ai_actions_idempotency ON ai_actions (idempotency_key)
 CREATE INDEX ai_actions_couple_time ON ai_actions (couple_id, created_at DESC);
 CREATE INDEX ai_actions_entity      ON ai_actions (entity_type, entity_id);
 
+-- before_state/after_state carry entity bodies verbatim, so this table is as
+-- sensitive as the rows it describes. It therefore carries the same three
+-- columns as every other couple-scoped table (ADR 0005), and the same policy.
+-- Verified: without them, a member of another couple could read a private
+-- memory's content straight out of after_state.
 CREATE TABLE audit_logs (
-    id           uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-    couple_id    uuid REFERENCES couples(id) ON DELETE CASCADE,
-    user_id      uuid REFERENCES users(id) ON DELETE SET NULL,
-    ai_action_id uuid REFERENCES ai_actions(id) ON DELETE SET NULL,
-    action       text NOT NULL,                   -- create | update | delete | share | …
-    entity_type  text NOT NULL,
-    entity_id    uuid,
-    before_state jsonb,
-    after_state  jsonb,
-    created_at   timestamptz NOT NULL DEFAULT now()
+    id            uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    couple_id     uuid REFERENCES couples(id) ON DELETE CASCADE,
+    user_id       uuid REFERENCES users(id) ON DELETE SET NULL,
+    owner_user_id uuid REFERENCES users(id) ON DELETE SET NULL,
+    visibility    visibility NOT NULL DEFAULT 'shared_couple',
+    ai_action_id  uuid REFERENCES ai_actions(id) ON DELETE SET NULL,
+    action        text NOT NULL,                  -- create | update | delete | share | …
+    entity_type   text NOT NULL,
+    entity_id     uuid,
+    before_state  jsonb,
+    after_state   jsonb,
+    created_at    timestamptz NOT NULL DEFAULT now(),
+
+    CONSTRAINT audit_logs_owner_required_when_private
+        CHECK (visibility <> 'private_user' OR owner_user_id IS NOT NULL)
 );
 CREATE INDEX audit_logs_entity ON audit_logs (entity_type, entity_id, created_at DESC);
 
@@ -658,6 +668,16 @@ CREATE TABLE attachment_links (
 --     SET LOCAL app.current_user_id   = '…';
 --     SET LOCAL app.current_couple_id = '…';
 -- A forgotten WHERE clause then returns nothing rather than leaking.
+--
+-- SET LOCAL IS LOAD-BEARING, NOT STYLE. Verified against PostgreSQL 16:
+--   * SET LOCAL  — scope ends at COMMIT. A later transaction on the same
+--                  pooled connection that forgets to set anything sees 0 rows.
+--   * SET        — survives COMMIT. A later transaction on the same pooled
+--                  connection sees the PREVIOUS couple's rows. This is a
+--                  cross-couple data leak, reproducible in three statements.
+-- The application must therefore issue these inside the request transaction,
+-- never on connection open, and the pool should DISCARD ALL on return.
+-- data/rls-tests.sql asserts both behaviours.
 -- ============================================================================
 
 CREATE OR REPLACE FUNCTION app_current_user() RETURNS uuid AS $$
@@ -721,8 +741,61 @@ ALTER TABLE dump_runs  FORCE  ROW LEVEL SECURITY;
 CREATE POLICY couple_scope ON dump_runs
     USING (couple_id = app_current_couple());
 
--- dump_block_entities and attachment_links carry no couple_id by design; they
--- are only reachable by joining a parent that is already policy-protected.
+-- Child tables carrying no couple_id of their own.
+--
+-- These were previously left unprotected on the reasoning that they are "only
+-- reachable by joining a parent that is already policy-protected". That
+-- reasoning is wrong: a direct SELECT joins nothing, and goal_transactions.note
+-- and plan_items.label are free text. Verified leaking across couples before
+-- these policies existed.
+--
+-- The policy derives scope from the parent instead of denormalising couple_id.
+-- The subquery is itself subject to the parent's policy, so an invisible parent
+-- yields an invisible child.
+ALTER TABLE goal_transactions   ENABLE ROW LEVEL SECURITY;
+ALTER TABLE goal_transactions   FORCE  ROW LEVEL SECURITY;
+CREATE POLICY couple_scope ON goal_transactions
+    USING (EXISTS (SELECT 1 FROM goals g WHERE g.id = goal_transactions.goal_id));
+
+ALTER TABLE plan_items          ENABLE ROW LEVEL SECURITY;
+ALTER TABLE plan_items          FORCE  ROW LEVEL SECURITY;
+CREATE POLICY couple_scope ON plan_items
+    USING (EXISTS (SELECT 1 FROM plans p WHERE p.id = plan_items.plan_id));
+
+ALTER TABLE memory_embeddings   ENABLE ROW LEVEL SECURITY;
+ALTER TABLE memory_embeddings   FORCE  ROW LEVEL SECURITY;
+CREATE POLICY couple_scope ON memory_embeddings
+    USING (EXISTS (SELECT 1 FROM memories m WHERE m.id = memory_embeddings.memory_id));
+
+ALTER TABLE dump_block_entities ENABLE ROW LEVEL SECURITY;
+ALTER TABLE dump_block_entities FORCE  ROW LEVEL SECURITY;
+CREATE POLICY couple_scope ON dump_block_entities
+    USING (EXISTS (SELECT 1 FROM dump_blocks b WHERE b.id = dump_block_entities.block_id));
+
+ALTER TABLE attachment_links    ENABLE ROW LEVEL SECURITY;
+ALTER TABLE attachment_links    FORCE  ROW LEVEL SECURITY;
+CREATE POLICY couple_scope ON attachment_links
+    USING (EXISTS (SELECT 1 FROM attachments a WHERE a.id = attachment_links.attachment_id));
+
+-- audit_logs: same policy as any other couple-scoped table.
+ALTER TABLE audit_logs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE audit_logs FORCE  ROW LEVEL SECURITY;
+CREATE POLICY couple_scope ON audit_logs
+    USING (
+        couple_id = app_current_couple()
+        AND (
+            visibility = 'shared_couple'
+            OR (visibility = 'private_user' AND owner_user_id = app_current_user())
+        )
+    );
+
+-- DELIBERATELY WITHOUT RLS — do not "fix" these:
+--   users, couple_members, auth_tokens
+-- All three are read during sign-in, before any session variable exists. A
+-- fail-closed policy would make authentication impossible. Access is instead
+-- constrained by the application never exposing them on an unauthenticated
+-- path, and by auth_tokens storing only a hash. expense_categories is global
+-- reference data with no couple content.
 
 -- notifications.user_id NULL means "addressed to both partners".
 ALTER TABLE notifications  ENABLE ROW LEVEL SECURITY;

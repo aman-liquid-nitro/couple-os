@@ -44,6 +44,29 @@ CONSTRAINT owner_required_when_private
 
 **Accepting.** A performance cost on every query, and one more concept for a future contributor to learn.
 
+## Verification, 2026-08-11
+
+Tested against PostgreSQL 16 rather than reasoned about. `data/rls-tests.sql`
+holds the 27 assertions; all pass. The decision survived, but three claims made
+above did not:
+
+1. "Every couple-scoped table carries `couple_id`, `owner_user_id` and
+   `visibility`" was not actually true of `audit_logs`, whose `after_state`
+   quotes entity bodies verbatim. A member of another couple could read a
+   private memory's content out of it. Fixed.
+2. Child tables without `couple_id` were assumed safe because they are "only
+   reachable by joining a parent that is already policy-protected". A direct
+   SELECT joins nothing; `goal_transactions.note` and `plan_items.label` leaked.
+   Fixed with parent-derived policies.
+3. The `SET LOCAL` discipline described under Consequences is load-bearing, not
+   stylistic. With plain `SET`, a leaked session variable persisted across
+   COMMIT and exposed the previous couple's rows to the next transaction on the
+   same connection.
+
+`users`, `couple_members` and `auth_tokens` remain deliberately without RLS:
+all are read before authentication, when no session variable exists, so a
+fail-closed policy would make sign-in impossible.
+
 ## Alternatives considered
 
 **Two values per §9** — rejected. Leaves system-generated inferences with nowhere to live except mixed in with user facts, which §9 itself warns against ("AI inference should not automatically be treated as confirmed fact").

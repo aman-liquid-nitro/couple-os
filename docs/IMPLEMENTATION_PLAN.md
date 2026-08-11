@@ -82,6 +82,28 @@ SELECT set_config('app.current_user_id',   @userId,   true),
 --                                          ↑ true = transaction-local
 ```
 
+**RLS proven before anything is built on it** — `data/rls-tests.sql` already
+exists and passes: 27 assertions run against PostgreSQL 16 covering read
+isolation, the write path, connection reuse and privilege escalation. M0's job
+is to port it to `CoupleOS.IntegrationTests` as xUnit and add the concurrency
+dimension SQL cannot express — 100 interleaved requests across a pooled
+connection. Three defects it already caught are fixed in `data/schema.sql`:
+`audit_logs` leaked private memory bodies through `after_state`, and
+`goal_transactions` and `plan_items` leaked free text to any couple because
+"reachable only via a protected parent" is untrue of a direct SELECT.
+
+The harness is verified in both directions: leaving `goal_transactions`
+unprotected fails at D2, and over-protecting it fails at D6.
+
+**Two rules the C# must honour**, both proven rather than assumed:
+- Session variables are set with `SET LOCAL` inside the request transaction.
+  Plain `SET` survives COMMIT and leaks the previous couple's rows to the next
+  request on the same pooled connection. `DISCARD ALL` on pool return is the
+  backstop.
+- `UPDATE`/`DELETE` against a row hidden by policy is a silent no-op, not an
+  error. Repositories must check affected-row counts and never infer success
+  from the absence of an exception.
+
 **One vertical slice** — seeded couple, no auth: a page with a text input that
 posts to `/capture`, classifies with the `fast` role via `IAnthropicProvider`
 behind `ILLMProvider`, calls `create_shopping_item`, writes an `ai_actions` row,
