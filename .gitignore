@@ -1,0 +1,48 @@
+# .NET
+bin/
+obj/
+*.user
+*.suo
+[Dd]ebug/
+[Rr]elease/
+artifacts/
+.vs/
+
+# Node / Next.js
+node_modules/
+.next/
+out/
+dist/
+*.tsbuildinfo
+
+# Environment & secrets — Couple OS handles private personal data
+.env
+.env.*
+!.env.example
+appsettings.Development.json
+appsettings.Local.json
+secrets.json
+*.pem
+*.key
+
+# Database & local data
+*.db
+*.sqlite
+pgdata/
+dumps/
+
+# AI / local models
+models/
+*.gguf
+
+# IDE & OS
+.idea/
+.vscode/*
+!.vscode/extensions.json
+Thumbs.db
+desktop.ini
+*.swp
+
+# Logs
+*.log
+logs/
