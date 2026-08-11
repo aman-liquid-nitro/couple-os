@@ -1,0 +1,57 @@
+{
+  "model": "qwen3.5:9b",
+  "stream": false,
+  "think": false,
+  "options": { "num_ctx": 4096, "temperature": 0 },
+  "messages": [
+    { "role": "system",
+      "content": "You convert a person's note into structured actions by calling tools. Rules: (1) Act only by calling tools; never describe a call in prose. (2) Never invent a value to satisfy a required field. (3) Do not do calendar arithmetic — emit the date as the person wrote it and the application resolves it. (4) If something is actionable but you lack a required value, call request_clarification rather than guessing or staying silent. (5) Call one tool per distinct item." },
+    { "role": "user",
+      "content": "we're out of detergent and coffee. also dinner at Priya's parents on Saturday 8pm" }
+  ],
+  "tools": [
+    { "type": "function",
+      "function": {
+        "name": "create_shopping_item",
+        "description": "Add one item to the couple's shopping list. Call once per distinct item.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "name":     { "type": "string", "description": "The item, singular, lowercase" },
+            "quantity": { "type": "string", "description": "Optional quantity as written" }
+          },
+          "required": ["name"]
+        }
+      }
+    },
+    { "type": "function",
+      "function": {
+        "name": "create_event",
+        "description": "Create a calendar event. Do NOT compute a date; pass the person's own wording in date_expression.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "title":           { "type": "string" },
+            "date_expression": { "type": "string", "description": "Verbatim, e.g. 'saturday 8pm', 'next friday'" },
+            "location":        { "type": "string" }
+          },
+          "required": ["title", "date_expression"]
+        }
+      }
+    },
+    { "type": "function",
+      "function": {
+        "name": "request_clarification",
+        "description": "Use when a note is actionable but a required value is genuinely missing and cannot be inferred. Never use it to avoid calendar arithmetic.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "question": { "type": "string", "description": "One specific question for the person" },
+            "about":    { "type": "string", "description": "The fragment of the note in question" }
+          },
+          "required": ["question", "about"]
+        }
+      }
+    }
+  ]
+}

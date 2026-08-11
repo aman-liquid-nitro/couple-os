@@ -101,7 +101,40 @@ Tier `none` · idempotent · SPEC.md §7
 }
 ```
 
-**Notes.** `due_at` is required — this is the whole difference between a reminder and a task. If the user gives no time ("remind me to book the dentist"), the tool is **not** called. The model asks when. SPEC.md §3.2 shows exactly this case resolving to `Needs clarification: Yes`.
+**Notes.** `due_at` is required — this is the whole difference between a reminder and a task. If the user gives no time ("remind me to book the dentist"), the tool is **not** called. The model calls `request_clarification` instead. SPEC.md §3.2 shows exactly this case resolving to `Needs clarification: Yes`.
+
+> Earlier wording here said "the model asks when", which assumed a conversation.
+> In the dump-file flow (ADR 0009) there is nobody to ask in the moment, so
+> asking must itself be a tool call — see `request_clarification` below.
+> Verified against a local model: given no such tool, it correctly declined to
+> invent a value, produced empty content, and the block silently vanished.
+
+---
+
+### 2a. `request_clarification`
+
+Tier `none` · idempotent · SPEC.md §3.2, §46 · ADR 0009
+
+```jsonc
+{
+  "question": { "type": "string", "maxLength": 300 },   // required, one specific question
+  "about":    { "type": "string", "maxLength": 300 },   // required, the fragment in question
+}
+```
+
+**Authorization** — caller is a member of the couple. Writes nothing except the
+block's own `status` and `question`.
+
+**Notes.** This is the only legal way to decline. Rule 1 of this document
+forbids inventing a value to satisfy a required field, and ADR 0004 makes tools
+the sole write path — so without this tool a model facing a missing value has no
+compliant action available, and the block disappears with no record and no
+error. It sets `dump_blocks.status = 'needs_input'` and fills `question`, which
+the schema has always had columns for; this is the tool that populates them.
+
+Not for calendar arithmetic. "Saturday 8pm" is not missing information — it is a
+`date_expression` the application resolves. Calling `request_clarification` for a
+resolvable date is a failure, and the eval set should assert against it.
 
 ---
 
