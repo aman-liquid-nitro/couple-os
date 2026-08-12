@@ -1,0 +1,55 @@
+# ============================================================================
+# Build context for src/CoupleOS.Api/Dockerfile.
+#
+# Two jobs, and the first one is not about image size.
+#
+# `bin/` and `obj/` hold a restore graph resolved on the *host*. On Windows
+# that graph carries C:\Users\...\.nuget paths and win-x64 assets, and copying
+# it into a Linux build makes `dotnet publish` resolve against paths that do
+# not exist — a failure whose message points at NuGet rather than at this file.
+# The build must restore from scratch inside the container.
+#
+# `.env` and `appsettings.Development.json` are gitignored, so they exist on a
+# developer's machine and not in a clean clone. Excluding them here means the
+# image built locally is the image built from a clean clone, and no secret is
+# ever baked into a layer. Configuration reaches the container through compose
+# environment variables instead.
+# ============================================================================
+
+# --- Host build output: correctness, not size ------------------------------
+**/bin/
+**/obj/
+
+# --- Secrets and machine-local configuration -------------------------------
+.env
+.env.*
+!.env.example
+**/appsettings.Development.json
+**/appsettings.Local.json
+**/secrets.json
+*.pem
+*.key
+
+# --- Not part of the application -------------------------------------------
+# src/ has no runtime dependency on any of these; the only mentions of `data/`
+# inside src/ are comments citing schema.sql. The db service mounts data/ from
+# the host, so the api image has no reason to carry it.
+.git
+.gitattributes
+.gitignore
+.github
+.serena
+.vs
+.vscode
+.idea
+tests/
+data/
+docs/
+decisions/
+design/
+product/
+research/
+assets/
+README.md
+docker-compose.yml
+.dockerignore

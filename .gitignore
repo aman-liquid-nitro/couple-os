@@ -37,6 +37,7 @@ models/
 
 # IDE & OS
 .idea/
+.serena/
 .vscode/*
 !.vscode/extensions.json
 Thumbs.db

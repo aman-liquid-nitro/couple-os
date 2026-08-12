@@ -1,4 +1,5 @@
 using CoupleOS.Api.Development;
+using CoupleOS.Api.Health;
 using CoupleOS.Application;
 using CoupleOS.AI.DependencyInjection;
 using CoupleOS.Infrastructure.DependencyInjection;
@@ -13,6 +14,13 @@ var connectionString = builder.Configuration.GetConnectionString("Default")
         "ConnectionStrings:Default is not configured. Copy .env.example to .env and run docker compose up -d.");
 
 builder.Services.AddRazorPages();
+
+// Container orchestration reads this, so it asserts something worth knowing:
+// the database answers. See DatabaseHealthCheck for why a liveness-only probe
+// was not enough.
+builder.Services.AddHealthChecks()
+    .AddCheck<DatabaseHealthCheck>("database", tags: ["ready"]);
+
 builder.Services.AddCoupleOsInfrastructure(connectionString);
 builder.Services.AddCoupleOsApplication();
 builder.Services.AddOllamaProvider(builder.Configuration);
@@ -41,5 +49,9 @@ if (app.Environment.IsDevelopment())
 }
 
 app.MapRazorPages();
+
+// Plain text, one word, no authentication: this is what the container's
+// HEALTHCHECK calls, and it must stay callable before M1 adds sessions.
+app.MapHealthChecks("/health");
 
 app.Run();

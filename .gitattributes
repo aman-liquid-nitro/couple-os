@@ -10,6 +10,14 @@
 *.yml  text eol=lf
 *.yaml text eol=lf
 
+# Same reasoning, one layer up. Every RUN in the Dockerfile continues across
+# lines with a trailing backslash, and a CRLF checkout carries the \r into the
+# shell inside the image. .dockerignore is read line by line by the daemon.
+# Neither is ever opened by a Windows tool, so LF unconditionally.
+Dockerfile      text eol=lf
+*.Dockerfile    text eol=lf
+.dockerignore   text eol=lf
+
 # Windows-native scripts keep CRLF.
 *.cmd  text eol=crlf
 *.bat  text eol=crlf

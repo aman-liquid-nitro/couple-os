@@ -2,9 +2,10 @@
 
 A private, intelligent memory and coordination layer for a couple's everyday life.
 
-**Status:** Specification and architecture complete. Implementation not started.
+**Status:** M0 complete — the walking skeleton walks. A note typed into a page
+becomes rows, under row-level security, with an audit trail and a change report.
 **Next target:** V0 (see [docs/V0_SCOPE.md](./docs/V0_SCOPE.md)) — not the roadmap.
-**Next step:** M0, the walking skeleton — see [docs/IMPLEMENTATION_PLAN.md](./docs/IMPLEMENTATION_PLAN.md).
+**Next step:** M1, identity — see [docs/IMPLEMENTATION_PLAN.md](./docs/IMPLEMENTATION_PLAN.md).
 
 ## Start here
 
@@ -88,27 +89,49 @@ recorded debt in one place. Start there.
 
 ## Running it
 
-Requires Docker. No .NET is needed until Milestone M0 creates the projects.
+Requires Docker, and nothing else — the API is built inside the image, so no
+local .NET SDK is needed to run the stack. One command, three containers:
 
 ```bash
-cp .env.example .env          # .env is gitignored; never commit it
-docker compose up -d          # postgres + maildev
+cp .env.example .env && docker compose up -d
 ```
+
+Then <http://localhost:8080>. Wait for all three to report `healthy`:
+
+```bash
+docker compose ps
+```
+
+`api` reports healthy only once `/health` has reached Postgres as the
+non-superuser role, so a healthy stack means the application can actually read
+and write — not merely that three processes started. If it sits on `starting`,
+`docker compose logs api` says why in its first few lines.
 
 The database builds itself from `data/schema.sql` on first start and creates
 the non-superuser application role. Verify row-level security actually holds:
 
 ```bash
-docker compose exec -u postgres db \
-  psql -d coupleos -v ON_ERROR_STOP=1 -f /repo/data/rls-tests.sql
+docker compose exec -u postgres db psql -d coupleos -v ON_ERROR_STOP=1 -f /repo/data/rls-tests.sql
+```
 
-docker compose exec -u postgres -e PGDATABASE=coupleos db \
-  bash /repo/data/rls-concurrency.sh
+```bash
+docker compose exec -u postgres -e PGDATABASE=coupleos db bash /repo/data/rls-concurrency.sh
 ```
 
 Expect 33 assertions passing, then `PASS — 1600 interleaved transactions,
 0 cross-couple leaks`. Both exit non-zero on failure, and both are verified to
 fail when a policy is removed, so a green run means something.
+
+The application suite needs the .NET SDK and the running stack. It shares its
+fixture identifiers with `rls-tests.sql`, and both re-seed rather than assume an
+empty database, so they can run in either order:
+
+```bash
+dotnet test
+```
+
+Expect 43 passing. It refuses to run at all if pointed at a superuser or
+`BYPASSRLS` role, because every isolation assertion would then be meaningless.
 
 Schema changed? The init scripts only run on an empty volume:
 

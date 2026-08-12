@@ -125,7 +125,7 @@ and swaps the result into the page with htmx.
 
 ### Exit criteria
 
-- [ ] `docker compose up` from a clean clone reaches a healthy stack, three containers
+- [x] `docker compose up` from a clean clone reaches a healthy stack, three containers — verified from an empty volume; `api` is no longer behind the `app` profile, and healthy means `/health` reached Postgres, not merely that a process started
 - [x] The EF model agrees with `data/schema.sql`; parity test passes (ADR 0012 — SQL owns the schema, there is no migration)
 - [x] The app connects as a role that is neither superuser nor `BYPASSRLS`
 - [x] Partner B cannot read Partner A's private memory **through `DbContext`**

@@ -1,8 +1,8 @@
 # ============================================================================
 # Couple OS — local development stack
 #
-#   docker compose up -d                 database + mail catcher
-#   docker compose --profile app up -d   the above plus the API (from M0 onward)
+#   docker compose up -d       api + database + mail catcher, three containers
+#   docker compose up -d db    the database alone, for the SQL RLS harnesses
 #
 # The database initialises itself from data/schema.sql on first start only.
 # To re-apply a changed schema:  docker compose down -v && docker compose up -d
@@ -32,7 +32,13 @@ services:
       # psql or pgbench installed on the host.
       - ./data:/repo/data:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-coupleos}"]
+      # -h 127.0.0.1 is not decoration. During first-start initialisation the
+      # entrypoint runs a temporary server with listen_addresses='' — reachable
+      # on the unix socket but not over TCP. A socket-based pg_isready reports
+      # ready while 01-schema.sql is still creating 28 tables, api starts, and
+      # the seeder inserts into tables that do not exist yet. Requiring TCP
+      # means healthy cannot be true until the init scripts have finished.
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-coupleos}"]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -51,10 +57,11 @@ services:
       timeout: 5s
       retries: 5
 
-  # Enabled from M0 onward, once the project exists:
-  #   docker compose --profile app up -d
+  # Part of the default stack since M0: the project exists and builds, which is
+  # what the `app` profile was previously waiting for. `docker compose up`
+  # reaching three healthy containers is M0's exit criterion, and a profile
+  # would have left it two.
   api:
-    profiles: ["app"]
     build:
       context: .
       dockerfile: src/CoupleOS.Api/Dockerfile

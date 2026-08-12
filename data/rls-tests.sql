@@ -73,6 +73,17 @@ GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO app_user;
 \set UB '''22222222-2222-2222-2222-222222222222'''
 \set UC '''33333333-3333-3333-3333-333333333333'''
 
+-- Fixtures are idempotent, and not merely as a convenience. The .NET suite's
+-- RlsFixture seeds these same three users and two couples, so on any volume
+-- where `dotnet test` has already run, an unguarded INSERT ended the harness at
+-- this line with a duplicate-key error — an error that looks like a broken
+-- database rather than what it is, and that reports no assertion either way.
+--
+-- Deleting the two couples is enough: every fixture table below reaches
+-- couples(id) through ON DELETE CASCADE, directly or via goals and plans.
+DELETE FROM couples WHERE id IN (:C1, :C2);
+DELETE FROM users   WHERE id IN (:UA, :UB, :UC);
+
 INSERT INTO users (id,email,display_name) VALUES
  (:UA,'a@x.com','Partner A'), (:UB,'b@x.com','Partner B'), (:UC,'c@x.com','Stranger C');
 INSERT INTO couples (id,display_name) VALUES (:C1,'Couple One'), (:C2,'Couple Two');
