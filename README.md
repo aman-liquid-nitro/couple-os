@@ -73,6 +73,7 @@ Capture → Understand → Remember → Organize → Act → Learn
 | [0009](./decisions/0009-capture-surfaces-split-by-scope.md) | Two capture surfaces, split by visibility scope |
 | [0010](./decisions/0010-server-rendered-ui-for-v0.md) | Server-rendered UI with htmx for V0 |
 | [0011](./decisions/0011-local-model-provider-for-development.md) | Ollama for development, Anthropic for validation |
+| [0012](./decisions/0012-sql-owns-the-schema.md) | The database schema is owned by SQL, not EF migrations |
 
 Two contradictions in the original specification are resolved by these:
 `PRIVATE`/`SHARED` versus the three-scope model (§9 vs §28) in ADR 0005, and

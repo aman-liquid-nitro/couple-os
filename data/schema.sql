@@ -4,8 +4,16 @@
 -- Target:  PostgreSQL 16
 -- Governs: ADR 0002 (pgvector), ADR 0005 (visibility), ADR 0006 (memory)
 --
--- Reference schema. EF Core migrations are the source of truth in the repo;
--- this file exists so the shape can be read and argued about in one place.
+-- THIS FILE IS THE SOURCE OF TRUTH (ADR 0012).
+--
+-- EF Core does not own the schema and there are no migrations. Row-level
+-- security policies, FORCE ROW LEVEL SECURITY, the generated tsvector column,
+-- the partial indexes and the deferrable constraint trigger cannot be expressed
+-- by EF's model builder, so a generated migration would be raw SQL wrapped in
+-- C# nobody reads — and the ADR 0005 policies would move out of a reviewable
+-- file into generated code, which is the last place security rules belong.
+--
+-- Change the schema here. SchemaParityTests asserts the EF model still agrees.
 --
 -- Tables marked [V0] ship in the prototype. The rest are created by the same
 -- initial migration but are unused until their milestone — creating them early

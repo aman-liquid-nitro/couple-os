@@ -121,12 +121,12 @@ and swaps the result into the page with htmx.
 ### Exit criteria
 
 - [ ] `docker compose up` from a clean clone reaches a healthy stack, three containers
-- [ ] Migration matches `data/schema.sql`; parity test passes
-- [ ] The app connects as a role that is neither superuser nor `BYPASSRLS`
-- [ ] Partner B cannot read Partner A's private memory **through `DbContext`**
-- [ ] A request that fails to set session context returns **zero rows**, not all rows
-- [ ] **Pooling test: 100 interleaved requests alternating between Partner A and Partner B, asserting zero cross-contamination.** This is the test that actually matters — the single-request version passes even when pooling is broken.
-- [ ] One capture creates one shopping item and one `ai_actions` row
+- [x] The EF model agrees with `data/schema.sql`; parity test passes (ADR 0012 — SQL owns the schema, there is no migration)
+- [x] The app connects as a role that is neither superuser nor `BYPASSRLS`
+- [x] Partner B cannot read Partner A's private memory **through `DbContext`**
+- [x] A request that fails to set session context returns **zero rows**, not all rows
+- [x] **Pooling test: 100 interleaved requests alternating between Partner A and Partner B, asserting zero cross-contamination.** This is the test that actually matters — the single-request version passes even when pooling is broken.
+- [x] One capture creates one shopping item and one `ai_actions` row
 - [ ] Eval harness exists and runs, with 3 cases wired in
 
 > The harness ships here, not in M4. Gates written after the code they judge get
