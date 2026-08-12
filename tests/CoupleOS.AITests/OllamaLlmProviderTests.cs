@@ -85,12 +85,35 @@ public sealed class OllamaLlmProviderTests
         ],
         Tools());
 
+    /// <summary>
+    /// Turns "connection actively refused" into an instruction. These tests
+    /// exercise a real model on purpose (ADR 0004 makes tool calls the only
+    /// write path, so mocking would test the mock), which means an absent
+    /// Ollama is a setup problem, not a defect — and should read like one.
+    /// </summary>
+    private static async Task<LlmCompletion> CompleteAsync(ILlmProvider provider)
+    {
+        try
+        {
+            return await provider.CompleteAsync(Request());
+        }
+        catch (HttpRequestException ex)
+        {
+            throw new InvalidOperationException(
+                "Ollama is not reachable. Start it, then confirm the model is pulled:\n" +
+                "    ollama serve        (or the tray application on Windows)\n" +
+                "    ollama pull qwen3.5:4b\n" +
+                "Override the endpoint with OLLAMA_BASE_URL if it runs elsewhere.",
+                ex);
+        }
+    }
+
     [Fact]
     public async Task A_note_becomes_dispatchable_tool_calls()
     {
         var provider = BuildProvider();
 
-        var completion = await provider.CompleteAsync(Request());
+        var completion = await CompleteAsync(provider);
 
         Assert.Equal(3, completion.ToolCalls.Count);
 
@@ -117,7 +140,7 @@ public sealed class OllamaLlmProviderTests
     {
         var provider = BuildProvider();
 
-        var completion = await provider.CompleteAsync(Request());
+        var completion = await CompleteAsync(provider);
 
         // Prose instead of a tool call means nothing is written and the change
         // report shows no entities created — a silent no-op. Worth asserting.
@@ -131,7 +154,7 @@ public sealed class OllamaLlmProviderTests
     {
         var provider = BuildProvider();
 
-        var completion = await provider.CompleteAsync(Request());
+        var completion = await CompleteAsync(provider);
 
         // SPEC.md 49 and 50 require per-couple cost tracking. Local inference is
         // free, but ai_actions records the same fields regardless so the switch

@@ -56,7 +56,25 @@ public sealed class RlsFixture
     private static void GuardAgainstPrivilegedTestRole()
     {
         using var conn = new NpgsqlConnection(AppConnectionString);
-        conn.Open();
+
+        try
+        {
+            conn.Open();
+        }
+        catch (NpgsqlException ex)
+        {
+            // Without this, an unreachable database produces one fifteen-frame
+            // stack trace per test — nineteen of them — to communicate a single
+            // fact that fits on one line. A test suite should tell you what to
+            // do, not make you read Npgsql's call stack to work it out.
+            // The Npgsql exception is deliberately NOT chained. xUnit prints the
+            // whole inner chain once per test, so keeping it turns one known
+            // diagnosis into sixteen copies of a stack trace that says nothing
+            // the first line has not already said.
+            throw new InvalidOperationException(
+                "PostgreSQL is not reachable. Start the local stack:  docker compose up -d  " +
+                $"(tried {Describe(AppConnectionString)}; {ex.InnerException?.Message ?? ex.Message})");
+        }
 
         using var cmd = conn.CreateCommand();
         cmd.CommandText =
@@ -80,6 +98,13 @@ public sealed class RlsFixture
                 "would be meaningless. Point COUPLEOS_APP_DB at the non-superuser application " +
                 "role — in PowerShell: Remove-Item env:COUPLEOS_APP_DB");
         }
+    }
+
+    /// <summary>Connection details minus the password, safe to put in a message.</summary>
+    private static string Describe(string connectionString)
+    {
+        var builder = new NpgsqlConnectionStringBuilder(connectionString) { Password = null };
+        return builder.ConnectionString;
     }
 
     private static void Seed()
