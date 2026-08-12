@@ -1,0 +1,14 @@
+@page "/auth/callback"
+@model CoupleOS.Api.Pages.Auth.CallbackModel
+@{ ViewData["Title"] = "Sign in"; }
+
+@* Only reached when the link did not work. A link that works redirects and never
+   renders this. *@
+<h1>That link did not work</h1>
+
+<p class="muted">
+    Sign-in links work once and expire after a few minutes, so this one has most
+    likely already been used or has timed out.
+</p>
+
+<p><a asp-page="/SignIn">Get a new link</a></p>

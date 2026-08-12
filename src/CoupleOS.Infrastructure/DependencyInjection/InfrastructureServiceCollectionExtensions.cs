@@ -1,11 +1,15 @@
+using CoupleOS.Application.Identity;
 using CoupleOS.Application.Persistence;
 using CoupleOS.Application.Tools;
 using CoupleOS.Domain.Enums;
 using CoupleOS.Application.Security;
+using CoupleOS.Infrastructure.Identity;
 using CoupleOS.Infrastructure.Persistence;
 using CoupleOS.Infrastructure.Security;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Logging;
 
 namespace CoupleOS.Infrastructure.DependencyInjection;
 
@@ -31,6 +35,12 @@ public static class InfrastructureServiceCollectionExtensions
                 .MapEnum<Visibility>("visibility")
                 .MapEnum<ActionOutcome>("action_outcome")));
 
+        // Identity runs on the same database and the same non-superuser role, but
+        // outside the couple scope — see IdentityDbContext for why that has to be
+        // a separate context rather than more DbSets on the one above. No enum
+        // mappings: auth_tokens.purpose is text, converted in the model.
+        services.AddDbContext<IdentityDbContext>(options => options.UseNpgsql(connectionString));
+
         // One instance per request, two interfaces onto it.
         services.AddScoped<CoupleScopeHolder>();
         services.AddScoped<ICoupleScopeAccessor>(sp => sp.GetRequiredService<CoupleScopeHolder>());
@@ -40,6 +50,47 @@ public static class InfrastructureServiceCollectionExtensions
 
         services.AddScoped<IShoppingItemWriter, ShoppingItemWriter>();
         services.AddScoped<IToolAuditSink, AiActionAuditSink>();
+
+        services.AddScoped<IAuthTokenStore, AuthTokenStore>();
+        services.AddScoped<ISessionStore, SessionStore>();
+        services.AddScoped<IUserDirectory, UserDirectory>();
+
+        // Injected rather than called statically so expiry and rate-limit windows
+        // are testable without waiting fifteen real minutes.
+        services.TryAddSingleton(TimeProvider.System);
+
+        return services;
+    }
+
+    /// <summary>
+    /// Mail delivery, separate from persistence because the two fail for unrelated
+    /// reasons and a deployment may well want one without the other.
+    /// </summary>
+    /// <param name="isDevelopment">
+    /// When true, delivery failures are logged and swallowed and every message is
+    /// written to the log — ADR 0007 requires the project to run locally with no
+    /// mail provider at all. In production a failed send must throw, because there
+    /// is no log for the user to read the link from.
+    /// </param>
+    public static IServiceCollection AddCoupleOsMail(
+        this IServiceCollection services,
+        SmtpOptions options,
+        bool isDevelopment)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+
+        services.AddSingleton(options);
+
+        if (isDevelopment)
+        {
+            services.AddSingleton<IEmailSender>(sp => new DevelopmentEmailSender(
+                new SmtpEmailSender(options),
+                sp.GetRequiredService<ILogger<DevelopmentEmailSender>>()));
+        }
+        else
+        {
+            services.AddSingleton<IEmailSender, SmtpEmailSender>();
+        }
 
         return services;
     }

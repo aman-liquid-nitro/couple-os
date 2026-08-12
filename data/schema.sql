@@ -809,12 +809,19 @@ CREATE POLICY couple_scope ON audit_logs
     );
 
 -- DELIBERATELY WITHOUT RLS — do not "fix" these:
---   users, couple_members, auth_tokens
--- All three are read during sign-in, before any session variable exists. A
--- fail-closed policy would make authentication impossible. Access is instead
--- constrained by the application never exposing them on an unauthenticated
--- path, and by auth_tokens storing only a hash. expense_categories is global
--- reference data with no couple content.
+--   users, couples, couple_members, auth_tokens, sessions
+-- All five are read during sign-in, before any session variable exists. A
+-- fail-closed policy would make authentication impossible: the request that
+-- establishes app.current_couple_id has to read sessions and couples to know
+-- what to set it to, and cannot be filtered by the value it is computing.
+-- Access is instead constrained by the application never exposing them on an
+-- unauthenticated path, and by auth_tokens and sessions storing only hashes.
+-- expense_categories is global reference data with no couple content.
+--
+-- Six unprotected, 22 forced, 28 total. `select relname from pg_class ... where
+-- not relrowsecurity` is the check, and it is asserted in the test suite —
+-- earlier versions of this comment named three of the six, which is how a
+-- reader concludes that sessions is protected when it never has been.
 
 -- notifications.user_id NULL means "addressed to both partners".
 ALTER TABLE notifications  ENABLE ROW LEVEL SECURITY;

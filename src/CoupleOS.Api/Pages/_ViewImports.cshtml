@@ -1,3 +1,8 @@
-﻿@using CoupleOS.Api
+@using CoupleOS.Api
+@using CoupleOS.Api.Identity
 @namespace CoupleOS.Api.Pages
 @addTagHelper *, Microsoft.AspNetCore.Mvc.TagHelpers
+
+@* Scoped, set by SessionAuthenticationMiddleware. Injected into every view so the
+   layout can render the session controls without each page model passing it down. *@
+@inject CurrentSession CurrentSession

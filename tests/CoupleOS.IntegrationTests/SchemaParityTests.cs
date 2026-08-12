@@ -1,6 +1,7 @@
 using CoupleOS.Infrastructure.DependencyInjection;
 using CoupleOS.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Metadata;
 using Microsoft.Extensions.DependencyInjection;
 using Npgsql;
 using Xunit;
@@ -22,7 +23,16 @@ public sealed class SchemaParityTests : IClassFixture<RlsFixture>
     /// runtime with a constraint violation rather than at build time.
     /// </summary>
     private static readonly HashSet<string> WrittenTables =
-        new(StringComparer.Ordinal) { "shopping_items", "ai_actions" };
+        new(StringComparer.Ordinal)
+        {
+            "shopping_items", "ai_actions",
+
+            // M1 identity. All five are inserted into during sign-in and
+            // invitation, so every NOT NULL column without a default must be
+            // mapped — the failure otherwise is a constraint violation at the
+            // moment someone tries to sign in for the first time.
+            "users", "couples", "couple_members", "auth_tokens", "sessions",
+        };
 
     /// <summary>
     /// Read-only for now, so unmapped required columns are tolerated. This is
@@ -33,13 +43,22 @@ public sealed class SchemaParityTests : IClassFixture<RlsFixture>
     private static readonly HashSet<string> ReadOnlyTables =
         new(StringComparer.Ordinal) { "memories" };
 
-    private static CoupleOsDbContext BuildContext(ServiceProvider provider) =>
-        provider.GetRequiredService<CoupleOsDbContext>();
-
     private static ServiceProvider BuildProvider() =>
         new ServiceCollection()
             .AddCoupleOsInfrastructure(RlsFixture.AppConnectionString)
             .BuildServiceProvider();
+
+    /// <summary>
+    /// Both contexts, because parity has to hold across all of them. Checking
+    /// only <see cref="CoupleOsDbContext"/> would have let every identity table
+    /// drift from data/schema.sql unnoticed, which is exactly the failure ADR
+    /// 0012 accepts this test as the mitigation for.
+    /// </summary>
+    private static List<IEntityType> AllMappedEntityTypes(ServiceProvider provider) =>
+    [
+        .. provider.GetRequiredService<CoupleOsDbContext>().Model.GetEntityTypes(),
+        .. provider.GetRequiredService<IdentityDbContext>().Model.GetEntityTypes(),
+    ];
 
     private sealed record Column(string Name, bool IsNullable, bool HasDefault);
 
@@ -73,11 +92,10 @@ public sealed class SchemaParityTests : IClassFixture<RlsFixture>
     public async Task Every_mapped_table_and_column_exists_in_the_database()
     {
         await using var provider = BuildProvider();
-        var db = BuildContext(provider);
 
         var problems = new List<string>();
 
-        foreach (var entity in db.Model.GetEntityTypes())
+        foreach (var entity in AllMappedEntityTypes(provider))
         {
             var table = entity.GetTableName();
             if (table is null)
@@ -118,11 +136,10 @@ public sealed class SchemaParityTests : IClassFixture<RlsFixture>
         // NULL with no default, not added to the entity, and discovered only
         // when a user presses Process and the insert throws.
         await using var provider = BuildProvider();
-        var db = BuildContext(provider);
 
         var problems = new List<string>();
 
-        foreach (var entity in db.Model.GetEntityTypes())
+        foreach (var entity in AllMappedEntityTypes(provider))
         {
             var table = entity.GetTableName();
             if (table is null || !WrittenTables.Contains(table))
@@ -157,9 +174,8 @@ public sealed class SchemaParityTests : IClassFixture<RlsFixture>
         // day someone writes create_memory, this test tells them what is
         // missing instead of the database doing it in production.
         await using var provider = BuildProvider();
-        var db = BuildContext(provider);
 
-        var mappedTables = db.Model.GetEntityTypes()
+        var mappedTables = AllMappedEntityTypes(provider)
             .Select(e => e.GetTableName())
             .Where(t => t is not null)
             .Select(t => t!)

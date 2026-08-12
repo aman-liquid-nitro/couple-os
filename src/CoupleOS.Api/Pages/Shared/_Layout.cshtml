@@ -8,7 +8,21 @@
 </head>
 <body>
     <header>
-        <nav><a class="brand" asp-page="/Index">Couple OS</a></nav>
+        <nav>
+            <a class="brand" asp-page="/Index">Couple OS</a>
+            <span class="spacer"></span>
+            @* Read from the request's own resolved session, never from a claim in
+               the page. A signed-out visitor never reaches a page that renders
+               this, but the check costs nothing and the alternative is a null. *@
+            @if (CurrentSession.IsSignedIn)
+            {
+                @if (CurrentSession.HasCouple)
+                {
+                    <a class="session" asp-page="/Couple/Invite">Partner</a>
+                }
+                <a class="session" asp-page="/SignOut">Sign out</a>
+            }
+        </nav>
     </header>
 
     <main role="main">

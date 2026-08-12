@@ -2,10 +2,12 @@
 
 A private, intelligent memory and coordination layer for a couple's everyday life.
 
-**Status:** M0 complete — the walking skeleton walks. A note typed into a page
-becomes rows, under row-level security, with an audit trail and a change report.
+**Status:** M0 and M1 complete. Two people sign in with no password anywhere in
+the system, form a couple, and each write to it as themselves — a note typed
+into a page becomes rows, under row-level security, with an audit trail and a
+change report.
 **Next target:** V0 (see [docs/V0_SCOPE.md](./docs/V0_SCOPE.md)) — not the roadmap.
-**Next step:** M1, identity — see [docs/IMPLEMENTATION_PLAN.md](./docs/IMPLEMENTATION_PLAN.md).
+**Next step:** M2, capture surfaces — see [docs/IMPLEMENTATION_PLAN.md](./docs/IMPLEMENTATION_PLAN.md).
 
 ## Start here
 
@@ -15,7 +17,7 @@ becomes rows, under row-level security, with an audit trail and a change report.
 | [docs/IMPLEMENTATION_PLAN.md](./docs/IMPLEMENTATION_PLAN.md) | How V0 gets built — milestones, exit criteria, risks |
 | [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md) | Shape of the system, domain model, request pipeline |
 | [docs/TOOLS.md](./docs/TOOLS.md) | Contracts for the seven V0 tools |
-| [decisions/](./decisions) | Why things are the way they are (ADRs 0001–0008) |
+| [decisions/](./decisions) | Why things are the way they are (ADRs 0001–0012) |
 | [docs/SPEC.md](./docs/SPEC.md) | The original full specification |
 
 ## Where things live
@@ -130,7 +132,7 @@ empty database, so they can run in either order:
 dotnet test
 ```
 
-Expect 43 passing. It refuses to run at all if pointed at a superuser or
+Expect 83 passing. It refuses to run at all if pointed at a superuser or
 `BYPASSRLS` role, because every isolation assertion would then be meaningless.
 
 Schema changed? The init scripts only run on an empty volume:
@@ -139,8 +141,19 @@ Schema changed? The init scripts only run on an empty volume:
 docker compose down -v && docker compose up -d
 ```
 
-Magic-link emails are caught by maildev at http://localhost:1080 — nothing is
-sent anywhere real in development.
+## Signing in
+
+There is no seeded account, and no password to set. Open
+<http://localhost:8080>, enter any address, and collect the link from maildev at
+<http://localhost:1080> — nothing is sent anywhere real in development, and the
+link is also written to `docker compose logs api` if maildev is not running.
+
+The first link creates your account; then create a couple and invite your
+partner with a second address. Links work once and expire after 15 minutes, and
+you get three per address per fifteen minutes.
+
+Unknown addresses are answered exactly as known ones are, so the sign-in screen
+cannot be used to find out who has an account (ADR 0007).
 
 ## Stack
 

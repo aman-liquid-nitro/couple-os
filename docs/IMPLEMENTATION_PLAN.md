@@ -151,8 +151,18 @@ Magic links per ADR 0007. No passwords anywhere in the codebase.
 - Session context middleware switches from seeded IDs to the real session
 - Dev mail to maildev; no external provider needed to run locally
 
-**Exit:** two real people in two browsers, correct isolation, replay of a
-consumed token fails identically to an expired one.
+### Exit criteria
+
+Written as checks rather than the prose this section used to carry, for the same
+reason M0's are: a milestone is done when its exit criteria are machine-checked.
+
+- [x] Two real people in two browsers, each attributed to themselves — verified through the running container: two sessions, two `ai_actions` rows naming different users, one couple
+- [x] Correct isolation — asserted through the couple scope a real session produces, not through fixtures: each partner sees shared rows and only their own private ones
+- [x] Replay of a consumed token fails identically to an expired one — and to a token that never existed; all three are the same value, and `ConsumedToken` gives the caller no field to tell them apart
+- [x] Single use is atomic — 12 simultaneous uses of one link, exactly one succeeds
+- [x] Rate limits hold and recover — 3 per email per 15 min, 10 per IP per hour, verified at the boundary and after the window passes
+- [x] An unknown address is answered identically to a known one — same outcome, same subject, bodies differing only in the token
+- [x] The seeded-couple path is gone — `DevelopmentScopeMiddleware` and `DevelopmentSeeder` are deleted, not disabled
 
 Anthropic API key lives in `.env`, never in the repo — `.gitignore` already
 covers `.env` and `appsettings.Local.json`.

@@ -138,7 +138,7 @@ These cost nothing now because the schema and architecture already accommodate t
 
 V0 is done when all of the following are true.
 
-- [ ] Two people sign in via magic link and form a couple
+- [x] Two people sign in via magic link and form a couple
 - [ ] Both partners can write to `shared.md` and each sees the other's captures
 - [ ] `Process` produces a change report naming every record created or updated
 - [ ] Re-running `Process` on an unchanged file creates **nothing** (hash dedup)
@@ -151,7 +151,7 @@ V0 is done when all of the following are true.
 - [ ] A failed tool call never produces success language in the response
 - [ ] `search_memory` returns relevant results lexically over a seeded corpus of ≥100 memories
 - [ ] Every AI mutation appears in `ai_actions` with input, output and outcome
-- [ ] The full stack runs from a clean clone with `docker compose up` and one `.env` file
+- [x] The full stack runs from a clean clone with `docker compose up` and one `.env` file
 
 ## Definition of *validated* — the harder bar
 

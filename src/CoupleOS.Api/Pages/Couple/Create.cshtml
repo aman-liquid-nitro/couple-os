@@ -1,0 +1,18 @@
+@page "/couple/create"
+@model CoupleOS.Api.Pages.Couple.CreateModel
+@{ ViewData["Title"] = "Create your couple"; }
+
+<h1>One more step</h1>
+
+<p class="muted">
+    Everything in Couple OS belongs to a couple. Create yours, then invite your
+    partner — nothing is shared with anyone until they accept.
+</p>
+
+<form method="post">
+    <label for="DisplayName">What should we call it? <span class="muted">(optional)</span></label>
+    <input type="text" id="DisplayName" name="DisplayName" value="@Model.DisplayName"
+           maxlength="120" autofocus placeholder="Us" />
+
+    <p><button type="submit">Create</button></p>
+</form>

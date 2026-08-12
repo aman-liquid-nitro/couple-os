@@ -1,0 +1,42 @@
+@page "/couple/invite"
+@model CoupleOS.Api.Pages.Couple.InviteModel
+@{ ViewData["Title"] = "Invite your partner"; }
+
+<h1>Invite your partner</h1>
+
+@if (Model.Sent)
+{
+    <p><strong>Invitation sent.</strong></p>
+    <p class="muted">
+        They will get a link that both accepts the invitation and signs them in.
+        It works once and expires in @Model.LifetimeDescription.
+    </p>
+    <p><a asp-page="/Index">Start writing</a></p>
+}
+else
+{
+    <p class="muted">
+        A couple has two people. Send your partner a link — they do not need an
+        account first, and accepting it creates one.
+    </p>
+
+    @if (Model.RateLimited)
+    {
+        <p class="warning" role="alert">Too many invitations just now. Try again in a few minutes.</p>
+    }
+
+    @if (Model.InvalidAddress)
+    {
+        <p class="warning" role="alert">That does not look like an email address.</p>
+    }
+
+    <form method="post">
+        <label for="Email">Their email address</label>
+        <input type="email" id="Email" name="Email" value="@Model.Email"
+               autocomplete="off" inputmode="email" required autofocus />
+
+        <p><button type="submit">Send invitation</button></p>
+    </form>
+
+    <p class="muted"><a asp-page="/Index">Skip for now</a> — you can invite them later.</p>
+}

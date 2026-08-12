@@ -1,0 +1,19 @@
+@page
+@model SignOutPageModel
+@{ ViewData["Title"] = "Sign out"; }
+
+<h1>Sign out</h1>
+
+@* POST, not a link. A GET sign-out is triggered by anything that prefetches a
+   URL — a mail client, a browser guessing at navigation — and signs people out
+   without them clicking anything. *@
+<form method="post">
+    <p><button type="submit">Sign out on this device</button></p>
+</form>
+
+<form method="post" asp-page-handler="Everywhere">
+    <p>
+        <button type="submit">Sign out everywhere</button>
+        <span class="muted">Ends every session, on every device.</span>
+    </p>
+</form>

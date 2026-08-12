@@ -12,11 +12,12 @@ namespace CoupleOS.Api.Health;
 /// error, which is the same class of dishonesty as claiming a tool call
 /// succeeded when it failed (SPEC.md §46).
 ///
-/// This is one of the two places that touch <see cref="CoupleOsDbContext"/>
-/// without going through <c>IScopedUnitOfWork</c>, and for the same reason as
-/// <c>DevelopmentSeeder</c>: it establishes no couple scope because it reads no
-/// rows. <c>SELECT 1</c> touches no table, so there is nothing for row-level
-/// security to filter and nothing for an unscoped connection to leak.
+/// This is the only place that touches <see cref="CoupleOsDbContext"/> without
+/// going through <c>IScopedUnitOfWork</c>, and it establishes no couple scope
+/// because it reads no rows: <c>SELECT 1</c> touches no table, so there is nothing
+/// for row-level security to filter and nothing for an unscoped connection to leak.
+/// Identity is not a second exception — it has its own context, <c>IdentityDbContext</c>,
+/// which has no couple-scoped table on it to read.
 ///
 /// It does not use <c>CanConnectAsync</c>, which was the obvious choice and the
 /// wrong one: that method catches the provider's exception and returns a bare
