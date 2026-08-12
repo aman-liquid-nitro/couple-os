@@ -1,3 +1,4 @@
+using CoupleOS.Application.AI;
 using CoupleOS.Application.Tools;
 using CoupleOS.Domain.Entities;
 using CoupleOS.Domain.Enums;
@@ -25,11 +26,34 @@ public sealed class AiActionAuditSink(CoupleOsDbContext dbContext) : IToolAuditS
             EntityId = entry.EntityId,
             ErrorMessage = entry.Error,
             LatencyMs = (int)entry.Duration.TotalMilliseconds,
+
+            Provider = entry.Context.Attribution?.Provider,
+            Model = entry.Context.Attribution?.Model,
+            LlmRole = entry.Context.Attribution is { } a ? ToLlmRoleLabel(a.Role) : null,
+            PromptTokens = entry.Context.Attribution?.PromptTokens,
+            CompletionTokens = entry.Context.Attribution?.CompletionTokens,
         };
 
         _dbContext.AiActions.Add(action);
         await _dbContext.SaveChangesAsync(cancellationToken);
     }
+
+    /// <summary>
+    /// The lowercase labels `llm_role` documents (ADR 0003).
+    ///
+    /// Strict, for the same reason the outcome mapping below is: a role written as
+    /// something the column does not document makes the row unqueryable by the
+    /// thing it exists to be queried by. Only `fast` and `deep` have CLR members;
+    /// `embed` and `local` are documented for later and unreachable from here.
+    /// </summary>
+    private static string ToLlmRoleLabel(LlmRole role) => role switch
+    {
+        LlmRole.Fast => "fast",
+        LlmRole.Deep => "deep",
+
+        _ => throw new ArgumentOutOfRangeException(
+            nameof(role), role, "llm_role documents 'fast | deep | embed | local'; add the label before using this role."),
+    };
 
     /// <summary>
     /// Throws rather than guessing.

@@ -58,11 +58,32 @@ shape with opposite answers, and one of those failures is unrecoverable.
 // NOTE: no "visibility" key appears in any tool schema below. It is injected
 // by the application from the capture surface (ADR 0009).
 
-// Dates are resolved by the application against the user's timezone before the
-// tool is called. The model emits intent; it does not do calendar arithmetic.
-"due_at": { "type": ["string","null"], "format": "date-time" }
-"date_expression": { "type": "string", "description": "e.g. 'tomorrow', 'next friday'" }
+// Dates. The model emits intent; it does not do calendar arithmetic
+// (non-negotiable 2, SPEC.md §56.7). So every schema below declares the
+// EXPRESSION field, and the application resolves it against the couple's
+// timezone and stores the timestamp.
+"due_expression":  { "type": "string", "description": "verbatim, e.g. 'tomorrow', 'next friday', 'saturday 8pm'" }
+"due_at":          // NOT a tool argument. The resolved column the application writes.
 ```
+
+> **Why the expression is the declared field, and not a resolved `date-time`.**
+> An earlier version of this section said dates are "resolved by the application
+> before the tool is called", while every schema still declared `due_at` /
+> `starts_at` as a `date-time`. That reads as two layers — a model-facing schema
+> and a resolved tool contract — but there is only one: `ITool.ParametersSchema`
+> is handed to the model verbatim (`CaptureProcessor`), and nothing sits between
+> the model's arguments and the tool's. A `date-time` in a schema is therefore a
+> `date-time` asked of the model.
+>
+> Measured, and this is the reason: given a schema asking for an ISO
+> `starts_at`, three separate models resolved "Saturday 8pm" against their own
+> training cutoffs and returned dates wrong by 7 months, 13 months, and nearly
+> three years — no error, a plausible timestamp, a calendar entry in 2023. Given
+> the same note with `date_expression`, all three returned "Saturday 8pm"
+> verbatim. The field name is the whole control.
+>
+> Resolution is owed before the first date-bearing tool ships (M3), and it needs
+> the couple's timezone, which `ToolExecutionContext` does not yet carry.
 
 ---
 
@@ -78,7 +99,7 @@ Tier `none` · idempotent · SPEC.md §11
   "description": { "type": ["string","null"], "maxLength": 2000 },
   "kind":        { "enum": ["task","commitment"], "default": "task" },
   "assigned_to": { "enum": ["me","partner","either"], "default": "either" },
-  "due_at":      { "type": ["string","null"], "format": "date-time" },
+  "due_expression": { "type": ["string","null"], "description": "verbatim, e.g. 'friday'" },
   "priority":    { "enum": ["low","normal","high"], "default": "normal" },
 }
 ```
@@ -96,12 +117,12 @@ Tier `none` · idempotent · SPEC.md §7
 ```jsonc
 {
   "title":      { "type": "string", "minLength": 1, "maxLength": 200 },   // required
-  "due_at":     { "type": "string", "format": "date-time" },              // required
+  "due_expression": { "type": "string", "description": "verbatim, e.g. 'friday 9am'" }, // required
   "for_whom":   { "enum": ["me","partner","both"], "default": "me" },
 }
 ```
 
-**Notes.** `due_at` is required — this is the whole difference between a reminder and a task. If the user gives no time ("remind me to book the dentist"), the tool is **not** called. The model calls `request_clarification` instead. SPEC.md §3.2 shows exactly this case resolving to `Needs clarification: Yes`.
+**Notes.** `due_expression` is required — this is the whole difference between a reminder and a task. If the user gives no time ("remind me to book the dentist"), the tool is **not** called. The model calls `request_clarification` instead. SPEC.md §3.2 shows exactly this case resolving to `Needs clarification: Yes`.
 
 > Earlier wording here said "the model asks when", which assumed a conversation.
 > In the dump-file flow (ADR 0009) there is nobody to ask in the moment, so
@@ -167,7 +188,7 @@ Tier `none` · idempotent · SPEC.md §14
   "merchant":    { "type": ["string","null"] },
   "paid_by":     { "enum": ["me","partner","unknown"], "default": "me" },
   "is_shared":   { "type": "boolean", "default": true },
-  "occurred_on": { "type": "string", "format": "date" },
+  "occurred_expression": { "type": ["string","null"], "description": "verbatim, e.g. 'yesterday'; defaults to today" },
 }
 ```
 
@@ -184,8 +205,8 @@ Tier `none` · idempotent · SPEC.md §16
 ```jsonc
 {
   "title":       { "type": "string", "minLength": 1, "maxLength": 200 },  // required
-  "starts_at":   { "type": "string", "format": "date-time" },             // required
-  "ends_at":     { "type": ["string","null"], "format": "date-time" },
+  "date_expression": { "type": "string", "description": "verbatim, e.g. 'saturday 8pm'" }, // required
+  "end_expression":  { "type": ["string","null"], "description": "verbatim, e.g. 'until 11'" },
   "all_day":     { "type": "boolean", "default": false },
   "location":    { "type": ["string","null"] },
   "category":    { "enum": ["birthday","anniversary","appointment","trip",
@@ -195,6 +216,13 @@ Tier `none` · idempotent · SPEC.md §16
 ```
 
 **Notes.** Birthdays and anniversaries default to `recurrence: "yearly"` and `all_day: true`. A year-less date ("her birthday is September 12") resolves to the next occurrence, and the response states the year it assumed so a wrong guess is correctable.
+
+The application resolves `date_expression` into the `starts_at` / `ends_at`
+columns; the model never sees those. `events.starts_at` stays `NOT NULL` in
+`data/schema.sql` — the resolver, not the model, is what guarantees it, and a
+resolver that cannot parse the expression must fail the call rather than pick a
+date. `request_clarification` covers the case where the note genuinely has no
+time in it; "saturday 8pm" is not that case (see 2a).
 
 ---
 
@@ -210,11 +238,11 @@ Tier `none` · **not** idempotent (dedup is semantic, not key-based) · SPEC.md 
   "assertion":  { "enum": ["user_stated","inferred"], "default": "user_stated" },
   "confidence": { "type": "number", "minimum": 0, "maximum": 1, "default": 1.0 },
   "subject_key":{ "type": ["string","null"] },
-  "expires_at": { "type": ["string","null"], "format": "date-time" },
+  "expires_expression": { "type": ["string","null"], "description": "verbatim, e.g. 'for two weeks'" },
 }
 ```
 
-**Validation.** `type: "temporary_context"` requires `expires_at`; the application defaults it to 30 days rather than rejecting (ADR 0006). `assertion: "inferred"` forces `confidence <= 0.7` regardless of what the model claims — a model cannot certify its own guess.
+**Validation.** `type: "temporary_context"` requires `expires_expression`; the application resolves it into the `expires_at` column and defaults it to 30 days rather than rejecting (ADR 0006). `assertion: "inferred"` forces `confidence <= 0.7` regardless of what the model claims — a model cannot certify its own guess.
 
 **Notes.** Visibility is structural, not inferred (ADR 0009). "She mentioned she really likes that bag" typed into the private chat thread is a `private_user` memory because of where it was typed. Typed into `shared.md`, it becomes a shared memory *and* raises `dump_blocks.privacy_flagged`, so the change report says "this looks like a surprise and it is in the shared file" — advisory only. The user's choice of surface is authoritative.
 
@@ -228,7 +256,7 @@ Tier `none` · read-only · SPEC.md §10, docs/V0_SCOPE.md
 {
   "query":      { "type": "string", "minLength": 1 },                     // required
   "types":      { "type": "array", "items": { "enum": [ /* memory_type */ ] } },
-  "since":      { "type": ["string","null"], "format": "date" },
+  "since_expression": { "type": ["string","null"], "description": "verbatim, e.g. 'since june'" },
   "limit":      { "type": "integer", "minimum": 1, "maximum": 20, "default": 10 }
 }
 ```

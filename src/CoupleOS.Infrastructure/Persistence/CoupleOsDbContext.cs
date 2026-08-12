@@ -55,6 +55,16 @@ public sealed class CoupleOsDbContext(DbContextOptions<CoupleOsDbContext> option
             e.Property(x => x.EntityId).HasColumnName("entity_id");
             e.Property(x => x.ErrorMessage).HasColumnName("error_message");
             e.Property(x => x.LatencyMs).HasColumnName("latency_ms");
+
+            // Model attribution. These columns existed in data/schema.sql from the
+            // first commit and nothing wrote them, which is worse than their being
+            // absent: an empty column reads as "this run had no model" rather than
+            // "nobody implemented this".
+            e.Property(x => x.Provider).HasColumnName("provider");
+            e.Property(x => x.Model).HasColumnName("model");
+            e.Property(x => x.LlmRole).HasColumnName("llm_role");
+            e.Property(x => x.PromptTokens).HasColumnName("prompt_tokens");
+            e.Property(x => x.CompletionTokens).HasColumnName("completion_tokens");
         });
 
         // NO global query filter on couple_id or visibility, and that is a

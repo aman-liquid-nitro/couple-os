@@ -39,9 +39,13 @@ public sealed class CaptureProcessor(
 
         var scope = _scopeAccessor.Current;
 
+        // Held in a local so the role recorded in the audit trail cannot drift from
+        // the role actually requested.
+        const LlmRole role = LlmRole.Fast;
+
         var completion = await _llmProvider.CompleteAsync(
             new LlmRequest(
-                LlmRole.Fast,
+                role,
                 [
                     new LlmMessage(LlmMessageRole.System, CapturePrompt.System),
                     new LlmMessage(LlmMessageRole.User, text),
@@ -73,9 +77,22 @@ public sealed class CaptureProcessor(
         // rolled back.
         await using var transaction = await _unitOfWork.BeginAsync(cancellationToken);
 
+        // One completion, N calls, billed once. The counts go on the first row and
+        // are omitted from the rest, so summing the column over a couple gives the
+        // real figure instead of N times it (SPEC.md 50). See LlmAttribution.
+        var attribution = LlmAttribution.From(completion.Usage, role);
+        var carriesTokens = true;
+
         foreach (var call in completion.ToolCalls)
         {
-            var result = await _toolDispatcher.DispatchAsync(call, context, cancellationToken);
+            var callContext = context with
+            {
+                Attribution = carriesTokens ? attribution : attribution.WithoutTokens(),
+            };
+
+            carriesTokens = false;
+
+            var result = await _toolDispatcher.DispatchAsync(call, callContext, cancellationToken);
 
             var change = new CaptureChange(
                 result.ToolName,

@@ -55,6 +55,19 @@ public sealed record ToolExecutionContext
 
     /// <summary>Set when the user has confirmed a Confirm-tier call.</summary>
     public bool IsConfirmed { get; init; }
+
+    /// <summary>
+    /// Which model proposed this call, for the audit trail. Null when a call did
+    /// not come from a model at all — a future scheduled job or a direct API
+    /// write is not attributable to one, and inventing a provider name for it
+    /// would be worse than a null.
+    ///
+    /// A tool never reads this: it rides on the context because the context is
+    /// what already reaches the audit sink, and adding a parameter to
+    /// <c>IToolDispatcher</c> would make every caller carry something only the
+    /// sink uses.
+    /// </summary>
+    public AI.LlmAttribution? Attribution { get; init; }
 }
 
 /// <summary>A tool call that has passed every gate and may now execute.</summary>

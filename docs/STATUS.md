@@ -18,7 +18,7 @@ updated speculatively is worse than none.
 | Milestone | M1 (identity) complete; M0 before it |
 | Commits | 29 |
 | Architecture decisions | 13 |
-| Tests | 88, all shown capable of failing |
+| Tests | 96, all shown capable of failing |
 | Registered tools | 1 of 7 (`create_shopping_item`) |
 | Mapped tables | 8 of 28 (+ `users`, `couples`, `couple_members`, `auth_tokens`, `sessions`) |
 | Eval cases running | 4 of 55 |
@@ -164,10 +164,11 @@ they are visible in one place rather than discoverable only by reading commits.
 16. **`SmtpEmailSender` cannot be cancelled mid-send.** `SmtpClient` has no cancellable send, so the token is observed before the call and not during it. Stated in the code rather than hidden behind a parameter that does nothing.
 17. **`PublicBaseUrl` is unset, so link URLs come from the request's `Host` header.** Correct for localhost and containers, and attacker-controlled in general: a forged Host would mint links pointing elsewhere. Set it before this is reachable from a network you do not control. *(M5)*
 18. **The RLS harnesses leave two tables behind.** `probe` and `t_results` persist in whatever database they ran against, unprotected and granted to the app role. Harmless in development, and something to remove before either harness is ever pointed at a deployed database.
-19. **`ai_actions` has `provider`, `model`, `llm_role`, `prompt_tokens`, `completion_tokens` and `estimated_cost` columns that nothing writes.** `AiActionAuditSink` populates none of them and the `AiAction` entity has no such properties; `LlmUsage` reaches the change report and stops. An empty column is worse than a missing one — it invites the assumption that the run used whatever is configured now. Owed before the eval set compares a local floor against a hosted result. *(ADR 0011, ADR 0013)*
+19. **`ai_actions.estimated_cost` is still unwritten**, deliberately: Ollama is free on both hosts, so any figure would be invented, and SPEC.md 50 wants one someone can act on. `provider`, `model`, `llm_role`, `prompt_tokens` and `completion_tokens` are now populated — token counts on one row per completion so `SUM` is the real figure rather than N times it. Map the cost column alongside the rate table that makes it meaningful.
 20. **Three environment variables in `.env.example` set nothing — two fixed, and the class of defect is the point.** `OLLAMA_KEEP_ALIVE` was read by no code and passed to no container (Ollama reads it as a *server* variable, and Ollama is not in the compose stack) — now removed from `.env.example` rather than left implying it worked. `LLM_FAST_MODEL`/`LLM_DEEP_MODEL` reached the container as `Llm__Roles__*` while `OllamaOptions` binds `Llm:Ollama:*` — fixed in compose, but the pattern is the point: a documented variable that quietly does nothing outlasts the person who wrote it. Nothing asserts that a configuration key is read by anyone.
-21. **`docs/TOOLS.md:187` has `create_event` take a resolved `starts_at`.** Resolving "Saturday 8pm" is calendar arithmetic against today, which non-negotiable 2 (SPEC.md 56.7) forbids the model from doing, and its sibling at `TOOLS.md:64` correctly uses `date_expression` with `TOOLS.md:136` noting the application resolves it. Demonstrated: against the old schema three models returned three wrong dates, off by 7 months, 13 months and nearly 3 years. `data/ollama-toolcall-smoke.json` has been aligned with `OllamaLlmProviderTests`, which was already correct; the published contract still needs a decision. *(M3)*
-22. **No CI.** Deliberately deferred. "CI gate" currently means a command someone remembers to run.
+21. **The eval set still encodes the pre-fix date contract.** Eight cases in `data/eval-cases.jsonl` expect resolved timestamps — `"due_at": "2026-08-12"`, `"starts_at": "2026-12-14"` — which is now the behaviour TOOLS.md forbids. They are inert because those tools are unregistered and `EvalCoverage` reports them blocked, so M3 unblocks tests that assert the wrong thing. Two problems, not one: the contract is wrong *and* a hard-coded absolute date rots as "today" moves. Not rewritten here — expectations are a measurement decision, and they belong with the milestone that registers the tools and can watch them pass. *(M3)*
+22. **Date resolution has nowhere to live.** TOOLS.md now declares expression fields on all eight date arguments, and the resolver they imply does not exist. It needs the couple's timezone, which `ToolExecutionContext` does not carry — `couples.timezone` and `users.timezone` are in the schema and unread. Owed before the first date-bearing tool ships. *(M3)*
+23. **No CI.** Deliberately deferred. "CI gate" currently means a command someone remembers to run.
 
 ---
 

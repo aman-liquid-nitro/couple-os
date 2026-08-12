@@ -133,7 +133,7 @@ empty database, so they can run in either order:
 dotnet test
 ```
 
-Expect 88 passing. It refuses to run at all if pointed at a superuser or
+Expect 96 passing. It refuses to run at all if pointed at a superuser or
 `BYPASSRLS` role, because every isolation assertion would then be meaningless.
 
 Thirteen of those call a real model, because ADR 0004 makes tool calls the only
