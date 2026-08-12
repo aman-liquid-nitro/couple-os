@@ -12,6 +12,7 @@ public static class ApplicationServiceCollectionExtensions
     {
         services.AddCoupleOsTools();
         services.AddScoped<ICaptureProcessor, CaptureProcessor>();
+        services.AddScoped<ICaptureIntake, CaptureIntake>();
         services.AddScoped<IMagicLinkService, MagicLinkService>();
 
         // TryAdd, so a host that binds these from configuration wins and a test

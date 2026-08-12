@@ -8,6 +8,9 @@ public sealed class CoupleOsDbContext(DbContextOptions<CoupleOsDbContext> option
     public DbSet<Memory> Memories => Set<Memory>();
     public DbSet<ShoppingItem> ShoppingItems => Set<ShoppingItem>();
     public DbSet<AiAction> AiActions => Set<AiAction>();
+    public DbSet<DumpFile> DumpFiles => Set<DumpFile>();
+    public DbSet<DumpRun> DumpRuns => Set<DumpRun>();
+    public DbSet<DumpBlock> DumpBlocks => Set<DumpBlock>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -65,6 +68,55 @@ public sealed class CoupleOsDbContext(DbContextOptions<CoupleOsDbContext> option
             e.Property(x => x.LlmRole).HasColumnName("llm_role");
             e.Property(x => x.PromptTokens).HasColumnName("prompt_tokens");
             e.Property(x => x.CompletionTokens).HasColumnName("completion_tokens");
+        });
+
+        b.Entity<DumpFile>(e =>
+        {
+            e.ToTable("dump_files");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Id).HasColumnName("id");
+            e.Property(x => x.CoupleId).HasColumnName("couple_id");
+            e.Property(x => x.OwnerUserId).HasColumnName("owner_user_id");
+            e.Property(x => x.Visibility).HasColumnName("visibility");
+            e.Property(x => x.Kind).HasColumnName("kind");
+            e.Property(x => x.Title).HasColumnName("title");
+            e.Property(x => x.Content).HasColumnName("content");
+            e.Property(x => x.ContentVersion).HasColumnName("content_version");
+            e.Property(x => x.LastProcessedAt).HasColumnName("last_processed_at");
+        });
+
+        b.Entity<DumpRun>(e =>
+        {
+            e.ToTable("dump_runs");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Id).HasColumnName("id");
+            e.Property(x => x.CoupleId).HasColumnName("couple_id");
+            e.Property(x => x.DumpFileId).HasColumnName("dump_file_id");
+            e.Property(x => x.TriggeredBy).HasColumnName("triggered_by");
+            e.Property(x => x.StartedAt).HasColumnName("started_at");
+            e.Property(x => x.FinishedAt).HasColumnName("finished_at");
+            e.Property(x => x.BlocksSeen).HasColumnName("blocks_seen");
+
+            // The remaining counters and report keep their database defaults
+            // until the run that fills them exists. Mapping a column to restate
+            // its default invites the two definitions to drift.
+        });
+
+        b.Entity<DumpBlock>(e =>
+        {
+            e.ToTable("dump_blocks");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Id).HasColumnName("id");
+            e.Property(x => x.DumpFileId).HasColumnName("dump_file_id");
+            e.Property(x => x.CoupleId).HasColumnName("couple_id");
+            e.Property(x => x.OwnerUserId).HasColumnName("owner_user_id");
+            e.Property(x => x.Visibility).HasColumnName("visibility");
+            e.Property(x => x.ContentHash).HasColumnName("content_hash");
+            e.Property(x => x.RawText).HasColumnName("raw_text");
+            e.Property(x => x.LineStart).HasColumnName("line_start");
+            e.Property(x => x.LineEnd).HasColumnName("line_end");
+            e.Property(x => x.Status).HasColumnName("status");
+            e.Property(x => x.RunId).HasColumnName("run_id");
         });
 
         // NO global query filter on couple_id or visibility, and that is a

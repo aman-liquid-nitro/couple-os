@@ -1,3 +1,4 @@
+using CoupleOS.Application.Capture;
 using CoupleOS.Application.Identity;
 using CoupleOS.Application.Persistence;
 using CoupleOS.Application.Tools;
@@ -33,7 +34,9 @@ public static class InfrastructureServiceCollectionExtensions
             connectionString,
             npgsql => npgsql
                 .MapEnum<Visibility>("visibility")
-                .MapEnum<ActionOutcome>("action_outcome")));
+                .MapEnum<ActionOutcome>("action_outcome")
+                .MapEnum<DumpFileKind>("dump_file_kind")
+                .MapEnum<DumpBlockStatus>("dump_block_status")));
 
         // Identity runs on the same database and the same non-superuser role, but
         // outside the couple scope — see IdentityDbContext for why that has to be
@@ -49,6 +52,11 @@ public static class InfrastructureServiceCollectionExtensions
         services.AddScoped<IScopedUnitOfWork, CoupleScopedUnitOfWork>();
 
         services.AddScoped<IShoppingItemWriter, ShoppingItemWriter>();
+
+        services.AddScoped<IDumpFileStore, DumpFileStore>();
+        services.AddScoped<IDumpBlockStore, DumpBlockStore>();
+        services.AddScoped<IDumpRunStore, DumpRunStore>();
+
         services.AddScoped<IToolAuditSink, AiActionAuditSink>();
 
         services.AddScoped<IAuthTokenStore, AuthTokenStore>();

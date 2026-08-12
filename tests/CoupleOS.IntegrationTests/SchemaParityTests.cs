@@ -32,6 +32,12 @@ public sealed class SchemaParityTests : IClassFixture<RlsFixture>
             // mapped — the failure otherwise is a constraint violation at the
             // moment someone tries to sign in for the first time.
             "users", "couples", "couple_members", "auth_tokens", "sessions",
+
+            // M2 capture. dump_files and dump_blocks are inserted through raw
+            // SQL rather than through EF, which makes this check matter more for
+            // them, not less: nothing in the ORM would notice a column added to
+            // data/schema.sql that a hand-written INSERT does not name.
+            "dump_files", "dump_runs", "dump_blocks",
         };
 
     /// <summary>
