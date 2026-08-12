@@ -171,7 +171,20 @@ Both surfaces from ADR 0009. Presentation differs; the pipeline does not.
 - Every record `private_user`, forced by the pipeline, not chosen by the model
 
 **Exit:** both surfaces produce blocks; a second `Process` on an unchanged file
-creates nothing; a correction line supersedes rather than duplicates.
+creates nothing; a correction line supersedes rather than duplicates; **and the
+change report accounts for every block, including those that produced no tool
+call.**
+
+> That last clause comes from running M0's slice. A three-line note produced two
+> shopping items and a report listing exactly those two. The third line — an
+> event — vanished: `create_event` was not registered, so the model had nothing
+> to call and nothing to say, and the report describes what it *did* rather than
+> what it *saw*. Nobody reading that screen would know a line had been ignored.
+>
+> Registering the missing tool would fix the example without fixing the defect.
+> The report must account for the input, not the actions. Block segmentation is
+> what makes that possible: every block carries a status, so silence becomes
+> impossible to render.
 
 ---
 

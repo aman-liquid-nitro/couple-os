@@ -1,9 +1,20 @@
 @page
 @model IndexModel
-@{ ViewData["Title"] = "Home"; }
+@{ ViewData["Title"] = "Shared"; }
 
-<h1>Couple OS</h1>
+<h1>shared.md</h1>
 <p class="muted">
-    Scaffold only. The shared dump editor and change report arrive in M2
-    (docs/IMPLEMENTATION_PLAN.md).
+    Write anything. Press Process when you are done — nothing happens until you do.
 </p>
+
+<form method="post" hx-post="/?handler=Process" hx-target="#report" hx-swap="innerHTML"
+      hx-disabled-elt="#process">
+    <textarea name="Text" id="Text" placeholder="we're out of detergent and coffee&#10;dinner at Priya's parents on Saturday 8pm"></textarea>
+
+    <p>
+        <button type="submit" id="process">Process</button>
+        <span class="muted htmx-indicator">thinking…</span>
+    </p>
+</form>
+
+<div id="report"></div>

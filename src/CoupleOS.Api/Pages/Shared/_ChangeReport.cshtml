@@ -1,0 +1,55 @@
+@using CoupleOS.Application.Capture
+@model CaptureReport
+
+@*
+    The change report. ADR 0009 chose an explicit Process button over silent
+    background extraction precisely so this exists: the system states what it
+    understood, and the user corrects it while the context is still in their
+    head.
+
+    Refusals are shown as prominently as successes. SPEC.md 46 forbids success
+    language over a failed action, and a refusal the user never sees is
+    indistinguishable from the system losing their note.
+*@
+
+@if (Model.DidNothing)
+{
+    <p class="muted">
+        Nothing actionable found.
+        @if (!string.IsNullOrWhiteSpace(Model.ModelSaid))
+        {
+            <span>The model said: @Model.ModelSaid</span>
+        }
+    </p>
+}
+else
+{
+    @if (Model.Applied.Count > 0)
+    {
+        <h2>Added</h2>
+        <ul class="report">
+            @foreach (var change in Model.Applied)
+            {
+                <li>@change.Description</li>
+            }
+        </ul>
+    }
+
+    @if (Model.Refused.Count > 0)
+    {
+        <h2>Not applied</h2>
+        <ul class="report">
+            @foreach (var change in Model.Refused)
+            {
+                <li>@change.Description</li>
+            }
+        </ul>
+    }
+}
+
+@if (Model.Usage is { } usage)
+{
+    <p class="muted">
+        @usage.Model · @usage.PromptTokens in, @usage.CompletionTokens out · @usage.Duration.TotalSeconds.ToString("0.0")s
+    </p>
+}
