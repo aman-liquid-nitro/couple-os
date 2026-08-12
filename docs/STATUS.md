@@ -17,17 +17,18 @@ updated speculatively is worse than none.
 |---|---|
 | Milestone | M1 (identity) complete; M0 before it |
 | Commits | 29 |
-| Architecture decisions | 12 |
-| Tests | 83, all shown capable of failing |
+| Architecture decisions | 13 |
+| Tests | 88, all shown capable of failing |
 | Registered tools | 1 of 7 (`create_shopping_item`) |
 | Mapped tables | 8 of 28 (+ `users`, `couples`, `couple_members`, `auth_tokens`, `sessions`) |
 | Eval cases running | 4 of 55 |
 
 Two real people can now sign in with no password anywhere in the system, form a
 couple, and each write to it as themselves: text typed into a page is extracted
-by a local model, validated and executed through the tool layer, written under
-row-level security scoped to whoever's session sent it, audited, and reported
-back — in under two seconds against a warm model.
+by a model — local, or Ollama's hosted service so a laptop GPU is not saturated
+for the duration (ADR 0013) — validated and executed through the tool layer,
+written under row-level security scoped to whoever's session sent it, audited,
+and reported back in about three seconds.
 
 **M1 is closed. The next branch is M2, capture surfaces.**
 
@@ -96,7 +97,9 @@ class involving leaked password hashes.
 
 ### AI
 - `ILlmProvider` in Application; `OllamaLlmProvider` in `CoupleOS.AI`. Application never references the AI project.
-- Model: `qwen3.5:4b`, thinking disabled, `num_ctx` explicit. Selection and measurements in [ADR 0011](../decisions/0011-local-model-provider-for-development.md).
+- One provider serves a local Ollama and Ollama's hosted service — identical `/api/chat`, so the difference is a base address and a bearer token ([ADR 0013](../decisions/0013-ollama-hosted-service-for-inference.md)). The credential's presence selects the host; `Name` reports `ollama-cloud` when set.
+- Hosted default `gemma4:31b`, local default `qwen3.5:4b`, thinking disabled, `num_ctx` explicit. Selection and measurements in [ADR 0011](../decisions/0011-local-model-provider-for-development.md) and ADR 0013.
+- The hosted free tier entitles **7 of the 18 models `/api/tags` lists** — the catalogue is not the entitlement. Of those 7, `gpt-oss:120b` and `:20b` fail the tool-call gate by returning one call and dropping the rest, which under ADR 0004 writes nothing and still renders a complete-looking report. `gemma4:31b` passes in ~2s.
 
 ### Web
 - Razor Pages + htmx, no Bootstrap or jQuery (ADR 0010). htmx vendored locally, not from a CDN.
@@ -161,7 +164,10 @@ they are visible in one place rather than discoverable only by reading commits.
 16. **`SmtpEmailSender` cannot be cancelled mid-send.** `SmtpClient` has no cancellable send, so the token is observed before the call and not during it. Stated in the code rather than hidden behind a parameter that does nothing.
 17. **`PublicBaseUrl` is unset, so link URLs come from the request's `Host` header.** Correct for localhost and containers, and attacker-controlled in general: a forged Host would mint links pointing elsewhere. Set it before this is reachable from a network you do not control. *(M5)*
 18. **The RLS harnesses leave two tables behind.** `probe` and `t_results` persist in whatever database they ran against, unprotected and granted to the app role. Harmless in development, and something to remove before either harness is ever pointed at a deployed database.
-19. **No CI.** Deliberately deferred. "CI gate" currently means a command someone remembers to run.
+19. **`ai_actions` has `provider`, `model`, `llm_role`, `prompt_tokens`, `completion_tokens` and `estimated_cost` columns that nothing writes.** `AiActionAuditSink` populates none of them and the `AiAction` entity has no such properties; `LlmUsage` reaches the change report and stops. An empty column is worse than a missing one — it invites the assumption that the run used whatever is configured now. Owed before the eval set compares a local floor against a hosted result. *(ADR 0011, ADR 0013)*
+20. **Three environment variables in `.env.example` set nothing — two fixed, and the class of defect is the point.** `OLLAMA_KEEP_ALIVE` was read by no code and passed to no container (Ollama reads it as a *server* variable, and Ollama is not in the compose stack) — now removed from `.env.example` rather than left implying it worked. `LLM_FAST_MODEL`/`LLM_DEEP_MODEL` reached the container as `Llm__Roles__*` while `OllamaOptions` binds `Llm:Ollama:*` — fixed in compose, but the pattern is the point: a documented variable that quietly does nothing outlasts the person who wrote it. Nothing asserts that a configuration key is read by anyone.
+21. **`docs/TOOLS.md:187` has `create_event` take a resolved `starts_at`.** Resolving "Saturday 8pm" is calendar arithmetic against today, which non-negotiable 2 (SPEC.md 56.7) forbids the model from doing, and its sibling at `TOOLS.md:64` correctly uses `date_expression` with `TOOLS.md:136` noting the application resolves it. Demonstrated: against the old schema three models returned three wrong dates, off by 7 months, 13 months and nearly 3 years. `data/ollama-toolcall-smoke.json` has been aligned with `OllamaLlmProviderTests`, which was already correct; the published contract still needs a decision. *(M3)*
+22. **No CI.** Deliberately deferred. "CI gate" currently means a command someone remembers to run.
 
 ---
 

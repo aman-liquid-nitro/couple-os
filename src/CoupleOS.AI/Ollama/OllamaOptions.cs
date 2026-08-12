@@ -10,6 +10,23 @@ public sealed class OllamaOptions
     [Required]
     public Uri BaseUrl { get; set; } = new("http://localhost:11434");
 
+    /// <summary>
+    /// Bearer token for Ollama's hosted service. Absent for a local instance,
+    /// which needs no credential — so its presence is what distinguishes the two,
+    /// and it is what <c>OllamaLlmProvider.Name</c> reports on.
+    ///
+    /// The hosted service speaks the same <c>/api/chat</c> with the same request
+    /// body, so pointing <see cref="BaseUrl"/> at https://ollama.com and setting
+    /// this is the entire difference. Its stated policy is that prompts and
+    /// responses are never logged or trained on, which is why it is the one
+    /// hosted option compatible with SPEC.md 40 — every free tier reached through
+    /// an aggregator reserves the opposite.
+    /// </summary>
+    public string? ApiKey { get; set; }
+
+    /// <summary>True when a credential is configured, which in practice means the hosted service.</summary>
+    public bool IsHosted => ApiKey is { Length: > 0 };
+
     /// <summary>Model serving the Fast role. See ADR 0011 for how it was chosen.</summary>
     [Required]
     public string FastModel { get; set; } = "qwen3.5:4b";

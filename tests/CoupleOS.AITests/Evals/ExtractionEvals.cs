@@ -39,6 +39,12 @@ public sealed class ExtractionEvals(ITestOutputHelper output)
                 ["Llm:Ollama:DeepModel"] = Environment.GetEnvironmentVariable("LLM_DEEP_MODEL") ?? "qwen3.5:4b",
                 ["Llm:Ollama:NumCtx"] = "4096",
                 ["Llm:Ollama:Think"] = "false",
+
+                // ADR 0013's hosted host needs a credential. This block is a
+                // near-copy of OllamaLlmProviderTests.BuildProvider, and adding
+                // the key to only one of them is exactly what happened first:
+                // the provider tests passed while every eval case returned 401.
+                ["Llm:Ollama:ApiKey"] = Environment.GetEnvironmentVariable("OLLAMA_API_KEY"),
             })
             .Build();
 

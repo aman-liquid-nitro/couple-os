@@ -29,6 +29,12 @@ public sealed class OllamaLlmProviderTests
                 ["Llm:Ollama:DeepModel"] = Environment.GetEnvironmentVariable("LLM_DEEP_MODEL") ?? "qwen3.5:4b",
                 ["Llm:Ollama:NumCtx"] = "4096",
                 ["Llm:Ollama:Think"] = "false",
+
+                // Absent for a local instance and required for the hosted one
+                // (ADR 0013). Without this the suite could only ever exercise
+                // localhost, which stopped being the default configuration the
+                // moment inference moved off the laptop.
+                ["Llm:Ollama:ApiKey"] = Environment.GetEnvironmentVariable("OLLAMA_API_KEY"),
             })
             .Build();
 
@@ -100,10 +106,16 @@ public sealed class OllamaLlmProviderTests
         catch (HttpRequestException ex)
         {
             throw new InvalidOperationException(
-                "Ollama is not reachable. Start it, then confirm the model is pulled:\n" +
+                "No Ollama is reachable. These tests need a real model; pick a host.\n\n" +
+                "Local:\n" +
                 "    ollama serve        (or the tray application on Windows)\n" +
-                "    ollama pull qwen3.5:4b\n" +
-                "Override the endpoint with OLLAMA_BASE_URL if it runs elsewhere.",
+                "    ollama pull qwen3.5:4b\n\n" +
+                "Hosted, which is what .env configures by default (ADR 0013). These are\n" +
+                "read from the environment, and `dotnet test` does not load .env itself:\n" +
+                "    OLLAMA_BASE_URL=https://ollama.com\n" +
+                "    OLLAMA_API_KEY=<https://ollama.com/settings/keys>\n" +
+                "    LLM_FAST_MODEL=gemma4:31b LLM_DEEP_MODEL=gemma4:31b\n\n" +
+                "In bash:  set -a; . ./.env; set +a; dotnet test",
                 ex);
         }
     }
@@ -157,9 +169,15 @@ public sealed class OllamaLlmProviderTests
         var completion = await CompleteAsync(provider);
 
         // SPEC.md 49 and 50 require per-couple cost tracking. Local inference is
-        // free, but ai_actions records the same fields regardless so the switch
-        // to a paid provider is configuration rather than new plumbing.
-        Assert.Equal("ollama", completion.Usage.Provider);
+        // free, but the same fields are reported regardless so the switch to a
+        // paid provider is configuration rather than new plumbing.
+        //
+        // Asserted against the provider's own name rather than a literal, because
+        // the literal was "ollama" and the host is now configurable (ADR 0013) —
+        // hard-coding it made this test fail on a correct hosted run. The property
+        // that matters either way is that usage is attributed to whoever answered.
+        Assert.Equal(provider.Name, completion.Usage.Provider);
+        Assert.Contains("ollama", completion.Usage.Provider, StringComparison.Ordinal);
         Assert.False(string.IsNullOrWhiteSpace(completion.Usage.Model));
         Assert.True(completion.Usage.PromptTokens > 0, "Prompt tokens were not reported.");
         Assert.True(completion.Usage.CompletionTokens > 0, "Completion tokens were not reported.");

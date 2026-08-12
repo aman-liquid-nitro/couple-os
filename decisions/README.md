@@ -16,6 +16,7 @@ One file per decision: `NNNN-short-title.md`.
 | [0010](./0010-server-rendered-ui-for-v0.md) | Server-rendered UI with htmx for V0 | Accepted |
 | [0011](./0011-local-model-provider-for-development.md) | Ollama for development, Anthropic for validation | Accepted |
 | [0012](./0012-sql-owns-the-schema.md) | The database schema is owned by SQL, not EF migrations | Accepted |
+| [0013](./0013-ollama-hosted-service-for-inference.md) | Ollama's hosted service for inference; local stays the fallback | Accepted |
 
 ## Template
 

@@ -7,7 +7,10 @@ using Microsoft.Extensions.Options;
 namespace CoupleOS.AI.Ollama;
 
 /// <summary>
-/// Talks to a local Ollama instance over /api/chat (ADR 0011).
+/// Talks to Ollama over /api/chat (ADR 0011) — a local instance, or the hosted
+/// service, which speaks the identical endpoint and request body. The only
+/// difference is the base address and a bearer token, so both are this one class
+/// rather than two (ADR 0013).
 ///
 /// Its whole job is translation: Application's vocabulary in, Ollama's wire
 /// format out, and back. It does not decide which tools to offer, interpret a
@@ -24,7 +27,16 @@ public sealed class OllamaLlmProvider(
     private readonly HttpClient _httpClient = httpClient ?? throw new ArgumentNullException(nameof(httpClient));
     private readonly OllamaOptions _options = options?.Value ?? throw new ArgumentNullException(nameof(options));
 
-    public string Name => "ollama";
+    /// <summary>
+    /// Distinguishes the two hosts, because ADR 0011 rests on the distinction:
+    /// "anything a local model tells us about extraction quality is a floor, not a
+    /// result". This value is what lands in <c>LlmUsage.Provider</c> and from
+    /// there into the audit trail — if every run were labelled "ollama", a floor
+    /// measured on a 4B model and a result measured on a frontier one would be
+    /// indistinguishable after the fact, which is the one thing the eval set
+    /// exists to keep apart.
+    /// </summary>
+    public string Name => _options.IsHosted ? "ollama-cloud" : "ollama";
 
     public async Task<LlmCompletion> CompleteAsync(
         LlmRequest request,

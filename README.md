@@ -17,7 +17,7 @@ change report.
 | [docs/IMPLEMENTATION_PLAN.md](./docs/IMPLEMENTATION_PLAN.md) | How V0 gets built — milestones, exit criteria, risks |
 | [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md) | Shape of the system, domain model, request pipeline |
 | [docs/TOOLS.md](./docs/TOOLS.md) | Contracts for the seven V0 tools |
-| [decisions/](./decisions) | Why things are the way they are (ADRs 0001–0012) |
+| [decisions/](./decisions) | Why things are the way they are (ADRs 0001–0013) |
 | [docs/SPEC.md](./docs/SPEC.md) | The original full specification |
 
 ## Where things live
@@ -77,6 +77,7 @@ Capture → Understand → Remember → Organize → Act → Learn
 | [0010](./decisions/0010-server-rendered-ui-for-v0.md) | Server-rendered UI with htmx for V0 |
 | [0011](./decisions/0011-local-model-provider-for-development.md) | Ollama for development, Anthropic for validation |
 | [0012](./decisions/0012-sql-owns-the-schema.md) | The database schema is owned by SQL, not EF migrations |
+| [0013](./decisions/0013-ollama-hosted-service-for-inference.md) | Ollama's hosted service for inference; local stays the fallback |
 
 Two contradictions in the original specification are resolved by these:
 `PRIVATE`/`SHARED` versus the three-scope model (§9 vs §28) in ADR 0005, and
@@ -132,8 +133,19 @@ empty database, so they can run in either order:
 dotnet test
 ```
 
-Expect 83 passing. It refuses to run at all if pointed at a superuser or
+Expect 88 passing. It refuses to run at all if pointed at a superuser or
 `BYPASSRLS` role, because every isolation assertion would then be meaningless.
+
+Thirteen of those call a real model, because ADR 0004 makes tool calls the only
+write path and mocking one would test the mock. They read the model host from the
+environment, and `dotnet test` does not load `.env` itself — so export it first:
+
+```bash
+set -a; . ./.env; set +a; dotnet test
+```
+
+Without that they fall back to a local Ollama on `localhost:11434` and tell you so
+if none is running.
 
 Schema changed? The init scripts only run on an empty volume:
 

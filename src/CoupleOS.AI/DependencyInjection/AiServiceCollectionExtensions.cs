@@ -1,3 +1,4 @@
+using System.Net.Http.Headers;
 using CoupleOS.AI.Ollama;
 using CoupleOS.Application.AI;
 using Microsoft.Extensions.Configuration;
@@ -36,6 +37,16 @@ public static class AiServiceCollectionExtensions
             // load costs six. The default HttpClient timeout would turn the
             // first request after an idle period into a spurious failure.
             client.Timeout = TimeSpan.FromSeconds(options.TimeoutSeconds);
+
+            // Set only when a key is configured. A local instance rejects nothing
+            // but needs nothing either, and sending an empty bearer token to it
+            // would be a header that means "unauthenticated" spelled as if it
+            // meant something (ADR 0013).
+            if (options.IsHosted)
+            {
+                client.DefaultRequestHeaders.Authorization =
+                    new AuthenticationHeaderValue("Bearer", options.ApiKey);
+            }
         });
 
         return services;

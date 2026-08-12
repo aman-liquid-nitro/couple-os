@@ -80,8 +80,19 @@ services:
       # validation run. Provider is chosen by config, not by code.
       Llm__Provider: ${LLM_PROVIDER:-ollama}
       Llm__Ollama__BaseUrl: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
-      Llm__Roles__Fast__Model: ${LLM_FAST_MODEL:-qwen3.5:4b}
-      Llm__Roles__Deep__Model: ${LLM_DEEP_MODEL:-qwen3.5:4b}
+      # Empty by default, which selects the local instance. Setting it points the
+      # same provider at Ollama's hosted service (ADR 0013) — inference leaves the
+      # laptop, and its stated policy is that prompts are never logged or trained
+      # on, which is what makes it the one hosted option ADR 0005/SPEC 40 tolerate.
+      Llm__Ollama__ApiKey: ${OLLAMA_API_KEY:-}
+      # Llm__Ollama__*, not Llm__Roles__*. ADR 0011 sketched the latter and this
+      # file followed it, but OllamaOptions binds Llm:Ollama:FastModel — so for
+      # every prior container run these variables set nothing and the model came
+      # from appsettings.json. It went unnoticed because that fallback happened
+      # to be the value intended, and only surfaced when the fallback was wrong
+      # for the configured host (a local model name against ollama.com is a 404).
+      Llm__Ollama__FastModel: ${LLM_FAST_MODEL:-qwen3.5:4b}
+      Llm__Ollama__DeepModel: ${LLM_DEEP_MODEL:-qwen3.5:4b}
       # Never leave this to Ollama's default — it truncates silently (ADR 0011).
       Llm__Ollama__NumCtx: ${LLM_NUM_CTX:-4096}
       Llm__Ollama__Think: ${LLM_THINK:-false}
