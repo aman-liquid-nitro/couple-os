@@ -21,27 +21,6 @@ public sealed class CaptureProcessor(
     IScopedUnitOfWork unitOfWork,
     ICoupleScopeAccessor scopeAccessor) : ICaptureProcessor
 {
-    /// <summary>
-    /// The rules here are TOOLS.md's universal rules, restated for the model.
-    ///
-    /// They are duplicated deliberately: the dispatcher enforces them whatever
-    /// the model does, and this asks the model not to try. Enforcement without
-    /// instruction produces a stream of refusals; instruction without
-    /// enforcement produces a leak. Both, or neither is much use.
-    ///
-    /// This becomes a versioned asset at M4 — an eval gate cannot mean anything
-    /// if the prompt it judges is a string literal that changes silently.
-    /// </summary>
-    private const string SystemPrompt =
-        "You convert a person's note into structured actions by calling tools.\n" +
-        "Rules:\n" +
-        "1. Act only by calling tools. Never describe a call in prose.\n" +
-        "2. Never invent a value to satisfy a required field. If something is actionable but a " +
-        "required value is genuinely missing, say nothing about it rather than guessing.\n" +
-        "3. Do not do calendar arithmetic. Emit dates exactly as the person wrote them.\n" +
-        "4. Call one tool per distinct item.\n" +
-        "5. If the note contains nothing actionable, call no tools.";
-
     private readonly ILlmProvider _llmProvider = llmProvider ?? throw new ArgumentNullException(nameof(llmProvider));
     private readonly IToolRegistry _toolRegistry = toolRegistry ?? throw new ArgumentNullException(nameof(toolRegistry));
     private readonly IToolDispatcher _toolDispatcher = toolDispatcher ?? throw new ArgumentNullException(nameof(toolDispatcher));
@@ -64,7 +43,7 @@ public sealed class CaptureProcessor(
             new LlmRequest(
                 LlmRole.Fast,
                 [
-                    new LlmMessage(LlmMessageRole.System, SystemPrompt),
+                    new LlmMessage(LlmMessageRole.System, CapturePrompt.System),
                     new LlmMessage(LlmMessageRole.User, text),
                 ],
                 [.. _toolRegistry.All.Select(t => new LlmTool(t.Name, t.Description, t.ParametersSchema))]),

@@ -127,7 +127,7 @@ and swaps the result into the page with htmx.
 - [x] A request that fails to set session context returns **zero rows**, not all rows
 - [x] **Pooling test: 100 interleaved requests alternating between Partner A and Partner B, asserting zero cross-contamination.** This is the test that actually matters — the single-request version passes even when pooling is broken.
 - [x] One capture creates one shopping item and one `ai_actions` row
-- [ ] Eval harness exists and runs, with 3 cases wired in
+- [x] Eval harness exists and runs, with 3 cases wired in — 4 run today; `EvalCoverage` reports the 28 blocked on unregistered tools rather than letting them pass as coverage
 
 > The harness ships here, not in M4. Gates written after the code they judge get
 > written to pass.
