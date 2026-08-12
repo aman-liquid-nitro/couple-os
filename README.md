@@ -81,6 +81,11 @@ Two contradictions in the original specification are resolved by these:
 ADR 0009 supersedes §7's single chat inbox, and ADR 0010 supersedes §41's
 Next.js frontend for V0.
 
+## Where the project is
+
+[docs/STATUS.md](./docs/STATUS.md) — what exists, what does not, and every
+recorded debt in one place. Start there.
+
 ## Running it
 
 Requires Docker. No .NET is needed until Milestone M0 creates the projects.

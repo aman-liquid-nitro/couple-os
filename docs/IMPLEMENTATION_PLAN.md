@@ -6,6 +6,11 @@ Scope: [V0_SCOPE.md](./V0_SCOPE.md). Governed by ADRs 0001–0009.
 
 ---
 
+> **This document is intent.** What has actually been built, and what is owed,
+> lives in [STATUS.md](./STATUS.md). Milestone exit criteria are ticked here
+> because they define the milestone; everything else about current state belongs
+> there.
+
 ## Decisions taken at plan review
 
 | Question | Decision |
