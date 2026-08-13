@@ -99,6 +99,18 @@ services:
       Anthropic__ApiKey: ${ANTHROPIC_API_KEY:-}
     ports:
       - "${API_PORT:-8080}:8080"
+    volumes:
+      # Data protection keys, which ASP.NET writes here and which otherwise die
+      # with the container. Antiforgery tokens are encrypted with them, so after
+      # `docker compose up --build` every open page POSTs a token the new
+      # container cannot decrypt and gets a 400 — including the sign-in form,
+      # which makes the app unusable until the browser's cookies are cleared by
+      # hand. Observed, repeatedly, while verifying M2 in a browser.
+      #
+      # A named volume rather than a bind mount: these are secrets, and they
+      # belong in Docker's storage rather than in the working tree where a stray
+      # `git add -A` could commit them.
+      - coupleos-dataprotection:/home/app/.aspnet/DataProtection-Keys
     depends_on:
       db:
         condition: service_healthy
@@ -112,3 +124,4 @@ services:
 
 volumes:
   coupleos-pgdata:
+  coupleos-dataprotection:

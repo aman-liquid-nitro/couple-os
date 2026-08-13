@@ -57,8 +57,21 @@ RUN apt-get update \
 WORKDIR /app
 COPY --from=build /app .
 
+# The one directory the app writes to: ASP.NET's data protection key ring, which
+# encrypts antiforgery tokens. Compose mounts a named volume here so the keys
+# outlive the container.
+#
+# It has to exist in the image, owned by the runtime user, and that is the whole
+# reason for this line. Docker seeds a new named volume from the image directory
+# it covers — including its ownership — but only if that directory exists. Create
+# the volume over a path the image does not have and Docker makes it root-owned;
+# the app then starts as uid 1654, cannot write its own key ring, and every page
+# 500s. Which is what happened.
+RUN mkdir -p /home/app/.aspnet/DataProtection-Keys \
+ && chown -R $APP_UID:$APP_UID /home/app/.aspnet
+
 # Provided by the base image (uid 1654). The app binds 8080, so it needs no
-# privileged port, and it writes nothing to disk.
+# privileged port, and it writes nothing to disk except the key ring above.
 USER $APP_UID
 
 # Documentation only — the published port is compose's business. Kestrel binds
