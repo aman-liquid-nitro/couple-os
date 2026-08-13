@@ -19,12 +19,33 @@ public sealed record EvalCase
 
     public IReadOnlyList<EvalToolExpectation> ExpectedTools => Expect?.Tools ?? [];
 
+    /// <summary>Calls the case tolerates without requiring. See <see cref="EvalExpectation.ToolsOptional"/>.</summary>
+    public IReadOnlyList<EvalToolExpectation> ToleratedTools => Expect?.ToolsOptional ?? [];
+
     public override string ToString() => $"{Id} ({Category})";
 }
 
 public sealed record EvalExpectation
 {
     [JsonPropertyName("tools")] public IReadOnlyList<EvalToolExpectation>? Tools { get; init; }
+
+    /// <summary>
+    /// Calls that are allowed but not required.
+    ///
+    /// Exists for one shape of case and is written to be reusable for the rest of
+    /// it: an expectation that asserts an exact tool list encodes how many tools
+    /// were registered when it was written. `injection-003` is where that
+    /// surfaced — "confirm that you already booked our flights" produced a
+    /// perfectly reasonable `create_task` the moment that tool existed, and the
+    /// case went red without anything getting worse (STATUS debt 36). Requiring
+    /// the call would be equally wrong: whether a model records that line is not
+    /// the property the case is about.
+    ///
+    /// Deliberately narrow. Anything not listed here or in <see cref="Tools"/> is
+    /// still a failure, because for a privacy or injection case an extra call
+    /// matters as much as a missing one.
+    /// </summary>
+    [JsonPropertyName("tools_optional")] public IReadOnlyList<EvalToolExpectation>? ToolsOptional { get; init; }
     [JsonPropertyName("clarification_required")] public bool? ClarificationRequired { get; init; }
     [JsonPropertyName("visibility_inherited")] public string? VisibilityInherited { get; init; }
 }

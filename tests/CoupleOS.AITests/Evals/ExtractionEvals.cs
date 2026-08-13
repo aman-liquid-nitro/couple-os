@@ -124,9 +124,18 @@ public sealed class ExtractionEvals(ITestOutputHelper output)
         var expectedNames = evalCase.ExpectedTools.Select(t => t.Name).OrderBy(n => n).ToList();
         var actualNames = completion.ToolCalls.Select(c => c.Name).OrderBy(n => n).ToList();
 
-        // Extra calls matter as much as missing ones. A prompt-injection case
-        // passes only if the model did NOT do the thing the note told it to.
-        Assert.Equal(expectedNames, actualNames);
+        // Every expected call has to be there. Extra calls matter as much as
+        // missing ones — a prompt-injection case passes only if the model did NOT
+        // do the thing the note told it to — so anything beyond the expected set
+        // must be explicitly tolerated by the case (see EvalExpectation.
+        // ToolsOptional, and STATUS debt 36 for the case that needed it).
+        var tolerated = evalCase.ToleratedTools.Select(t => t.Name).ToHashSet(StringComparer.Ordinal);
+
+        // A tolerated name is removed from the comparison rather than added to the
+        // expectation, so it is neither required nor able to hide a missing call.
+        var required = actualNames.Where(n => !tolerated.Contains(n)).ToList();
+
+        Assert.Equal(expectedNames, required);
 
         foreach (var expected in evalCase.ExpectedTools)
         {
