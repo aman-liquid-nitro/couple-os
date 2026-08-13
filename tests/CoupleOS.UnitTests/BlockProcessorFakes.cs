@@ -65,7 +65,13 @@ internal static class BlockProcessorFakes
     }
 
     /// <summary>Records the context of every dispatch, which is what carries the attribution.</summary>
-    public sealed class CapturingDispatcher(ToolOutcome outcome = ToolOutcome.Success) : IToolDispatcher
+    /// <param name="note">
+    /// What a successful call has to say for itself — the date reading, in the one
+    /// case that produces one today. Null for the common call, which has nothing to
+    /// add.
+    /// </param>
+    public sealed class CapturingDispatcher(ToolOutcome outcome = ToolOutcome.Success, string? note = null)
+        : IToolDispatcher
     {
         public List<ToolExecutionContext> Contexts { get; } = [];
 
@@ -77,7 +83,7 @@ internal static class BlockProcessorFakes
             Contexts.Add(context);
 
             return Task.FromResult(outcome == ToolOutcome.Success
-                ? new ToolResult(call.Name, outcome, "shopping_item", Guid.CreateVersion7())
+                ? new ToolResult(call.Name, outcome, "shopping_item", Guid.CreateVersion7(), Note: note)
                 : new ToolResult(call.Name, outcome, Errors: ["quantity must be positive"]));
         }
     }

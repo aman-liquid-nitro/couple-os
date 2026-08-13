@@ -52,6 +52,9 @@ public sealed class ExtractionEvals(ITestOutputHelper output)
             .AddOllamaProvider(configuration)
             .AddCoupleOsTools()
             .AddSingleton<IShoppingItemWriter, NullShoppingItemWriter>()
+            .AddSingleton<ITaskWriter, NullTaskWriter>()
+            .AddSingleton<IPartnerLookup, StubPartnerLookup>()
+            .AddSingleton<CoupleOS.Application.Time.ICoupleClock, FixedCoupleClock>()
             .AddSingleton<IToolAuditSink, NullAuditSink>()
             .BuildServiceProvider();
     }

@@ -16,6 +16,12 @@ public static class ToolServiceCollectionExtensions
         // Adding a tool means adding a line here. Nothing else changes.
         services.AddScoped<ITool, CreateShoppingItemTool>();
 
+        // M3. Two tools over one table: a reminder is a task whose due time is
+        // required, which is one label and one check constraint rather than a
+        // second entity (ARCHITECTURE.md §3).
+        services.AddScoped<ITool, CreateTaskTool>();
+        services.AddScoped<ITool, CreateReminderTool>();
+
         // Registered alongside the writing tools rather than treated as part of
         // the pipeline, because to the model it is one of the options and that is
         // exactly the point: declining has to be as reachable as acting, or the

@@ -7,6 +7,14 @@ public sealed class CoupleOsDbContext(DbContextOptions<CoupleOsDbContext> option
 {
     public DbSet<Memory> Memories => Set<Memory>();
     public DbSet<ShoppingItem> ShoppingItems => Set<ShoppingItem>();
+
+    /// <summary>
+    /// Tasks, reminders and commitments — one table discriminated by
+    /// <c>kind</c> (ARCHITECTURE.md §3), so one DbSet serves three of the seven
+    /// tools. Named for the table rather than for the entity, which is called
+    /// <see cref="TaskItem"/> for the reason recorded there.
+    /// </summary>
+    public DbSet<TaskItem> Tasks => Set<TaskItem>();
     public DbSet<AiAction> AiActions => Set<AiAction>();
     public DbSet<DumpFile> DumpFiles => Set<DumpFile>();
     public DbSet<DumpRun> DumpRuns => Set<DumpRun>();
@@ -43,6 +51,27 @@ public sealed class CoupleOsDbContext(DbContextOptions<CoupleOsDbContext> option
             // status, recurring, created_at and the rest keep their database
             // defaults. Mapping a column just to restate its default invites the
             // two definitions to drift.
+        });
+
+        b.Entity<TaskItem>(e =>
+        {
+            e.ToTable("tasks");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Id).HasColumnName("id");
+            e.Property(x => x.CoupleId).HasColumnName("couple_id");
+            e.Property(x => x.OwnerUserId).HasColumnName("owner_user_id");
+            e.Property(x => x.Visibility).HasColumnName("visibility");
+            e.Property(x => x.Kind).HasColumnName("kind");
+            e.Property(x => x.Title).HasColumnName("title");
+            e.Property(x => x.Description).HasColumnName("description");
+            e.Property(x => x.Priority).HasColumnName("priority");
+            e.Property(x => x.DueAt).HasColumnName("due_at");
+            e.Property(x => x.CommittedToUserId).HasColumnName("committed_to_user_id");
+
+            // status, source, created_at, updated_at and the rest keep their
+            // database defaults, as shopping_items does. status is the one worth
+            // naming: every task starts 'todo', and mapping the column would let
+            // a future entity default disagree with the schema about that.
         });
 
         b.Entity<AiAction>(e =>

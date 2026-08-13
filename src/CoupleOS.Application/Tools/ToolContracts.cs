@@ -87,15 +87,26 @@ public sealed record ToolValidation(bool IsValid, IReadOnlyList<string> Errors)
 /// block without knowing that tool by name — a capability in the result rather
 /// than a string comparison on the tool's own.
 /// </param>
+/// <param name="Note">
+/// Something the person should know about a call that succeeded — today, which
+/// date an expression resolved to and what was filled in to get there.
+///
+/// Separate from <paramref name="Error"/> because it is not a failure, and
+/// separate from <paramref name="Question"/> because it needs no answer. The rule
+/// it exists for is <c>DateExpressionResolver</c>'s: completing an expression is
+/// allowed and completing it silently is not, and a note that stops at the tool
+/// boundary is silent as far as the couple is concerned.
+/// </param>
 public sealed record ToolExecution(
     ToolOutcome Outcome,
     string? EntityType = null,
     Guid? EntityId = null,
     string? Error = null,
-    string? Question = null)
+    string? Question = null,
+    string? Note = null)
 {
-    public static ToolExecution Created(string entityType, Guid entityId) =>
-        new(ToolOutcome.Success, entityType, entityId);
+    public static ToolExecution Created(string entityType, Guid entityId, string? note = null) =>
+        new(ToolOutcome.Success, entityType, entityId, Note: note);
 
     public static ToolExecution Failed(string error) =>
         new(ToolOutcome.ExecutionFailed, Error: error);
@@ -119,7 +130,8 @@ public sealed record ToolResult(
     string? EntityType = null,
     Guid? EntityId = null,
     IReadOnlyList<string>? Errors = null,
-    string? Question = null)
+    string? Question = null,
+    string? Note = null)
 {
     public bool Succeeded => Outcome == ToolOutcome.Success;
 

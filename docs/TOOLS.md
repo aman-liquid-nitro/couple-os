@@ -108,6 +108,20 @@ Tier `none` · idempotent · SPEC.md §11
 
 **Notes.** `kind: "commitment"` requires a resolvable partner and records `committed_to_user_id`. "I said I would call my parents" is a commitment; "buy detergent" is a task. The distinction is social, not structural (SPEC.md §11).
 
+> **`assigned_to` is not implemented, and the schema is why.** Written while
+> building the tool. `tasks` has `owner_user_id` and `committed_to_user_id` and
+> nothing else that names a person: the first is the privacy column — null unless
+> the row is private (ARCHITECTURE.md §5), and read by the row-level security
+> policy — and the second is tied to `kind = 'commitment'` by
+> `tasks_commitment_needs_target`. SPEC.md §11's own model has no `assignedTo`
+> either, so this argument originates here rather than in the spec. The choice was
+> between adding a column mid-milestone under ADR 0012 and shipping the tool
+> without the argument; the argument is **absent from the schema the model sees**,
+> because offering a word the row cannot carry produces a model that believes it
+> assigned work. The authorization sentence above still holds for the half that
+> exists: a commitment resolves the other member and fails rather than guessing
+> when there is only one. STATUS debt 35 owns the column.
+
 ---
 
 ### 2. `create_reminder`
@@ -129,6 +143,20 @@ Tier `none` · idempotent · SPEC.md §7
 > asking must itself be a tool call — see `request_clarification` below.
 > Verified against a local model: given no such tool, it correctly declined to
 > invent a value, produced empty content, and the block silently vanished.
+
+> **`for_whom` is not implemented either**, and for a different reason than
+> `create_task`'s `assigned_to`: it describes who gets *notified*, and V0 has no
+> notifications at all (V0_SCOPE.md cuts the delivery half). There is no column for
+> the intent and no mechanism for the effect, so it is absent from the schema rather
+> than accepted and ignored. Same debt, STATUS 35.
+>
+> **What the tool does say out loud.** The resolved time is reported back with
+> anything that was filled in: *"friday" read as Fri 14 Aug 2026, 09:00 — assumed
+> 9am, since no time was given*. That sentence is a tool-result field
+> (`ToolExecution.Note`) rather than prose, so the change report prints it on the
+> line it belongs to. Nine in the morning and not midnight, because midnight is
+> what any "just take the date" implementation produces and a reminder at midnight
+> is a reminder nobody sees.
 
 ---
 

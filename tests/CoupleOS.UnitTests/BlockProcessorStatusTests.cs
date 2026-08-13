@@ -66,6 +66,32 @@ public sealed class BlockProcessorStatusTests
     }
 
     [Fact]
+    public async Task What_a_successful_call_had_to_assume_reaches_the_change_it_belongs_to()
+    {
+        // The date contract's second rule: completing an expression is allowed and
+        // completing it silently is not. The resolver produces the sentence and the
+        // tool carries it out as ToolResult.Note; this is the hop that puts it in
+        // front of the person, on the line it is about rather than in a footnote
+        // nobody associates with anything.
+        var store = new RecordingBlockStore();
+
+        var processor = Build(
+            new StubProvider(new LlmCompletion([Call("create_reminder")], null, Usage())),
+            new CapturingDispatcher(note: "\"friday\" read as Fri 14 Aug 2026, 09:00 — assumed 9am, since no time was given"),
+            store,
+            new CountingUnitOfWork());
+
+        var report = await processor.ProcessAsync(Block("remind me to call the plumber friday"));
+
+        Assert.Equal(DumpBlockStatus.Processed, report.Status);
+
+        var change = Assert.Single(report.Changes);
+        Assert.Equal(ToolOutcome.Success, change.Outcome);
+        Assert.Contains("assumed 9am", change.Description, StringComparison.Ordinal);
+        Assert.StartsWith("create reminder:", change.Description, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task A_block_whose_every_call_was_refused_is_failed_not_processed()
     {
         // SPEC.md 46: no success language over a failed action. "Processed" on a

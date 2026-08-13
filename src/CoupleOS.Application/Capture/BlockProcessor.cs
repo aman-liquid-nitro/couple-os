@@ -292,7 +292,13 @@ public sealed class BlockProcessor(
 
         if (result.Succeeded)
         {
-            return $"{Humanise(result.ToolName)}: {Summarise(call)}";
+            // The note rides along on the same line rather than in a section of
+            // its own. It is about this change and nothing else — which date
+            // "friday" landed on, what hour was filled in — and a person reading
+            // "create reminder: call the plumber" needs it there or not at all.
+            return result.Note is { Length: > 0 } note
+                ? $"{Humanise(result.ToolName)}: {Summarise(call)} — {note}"
+                : $"{Humanise(result.ToolName)}: {Summarise(call)}";
         }
 
         var reason = result.Errors is { Count: > 0 }

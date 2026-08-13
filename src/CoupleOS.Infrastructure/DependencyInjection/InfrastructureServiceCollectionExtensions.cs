@@ -40,7 +40,14 @@ public static class InfrastructureServiceCollectionExtensions
                 .MapEnum<ActionOutcome>("action_outcome")
                 .MapEnum<DumpFileKind>("dump_file_kind")
                 .MapEnum<DumpBlockStatus>("dump_block_status")
-                .MapEnum<MessageRole>("message_role")));
+                .MapEnum<MessageRole>("message_role")
+
+                // M3. task_status is deliberately absent: no V0 tool writes it and
+                // nothing reads it yet, so the entity leaves the column to its
+                // default and there is no CLR enum to keep in step. It arrives with
+                // the read surface that filters on it.
+                .MapEnum<TaskItemKind>("task_kind")
+                .MapEnum<PriorityLevel>("priority_level")));
 
         // Identity runs on the same database and the same non-superuser role, but
         // outside the couple scope — see IdentityDbContext for why that has to be
@@ -56,6 +63,11 @@ public static class InfrastructureServiceCollectionExtensions
         services.AddScoped<IScopedUnitOfWork, CoupleScopedUnitOfWork>();
 
         services.AddScoped<IShoppingItemWriter, ShoppingItemWriter>();
+        services.AddScoped<ITaskWriter, TaskWriter>();
+
+        // On IdentityDbContext, because couple_members has no row-level security.
+        // Same seam as the clock below, and the same reason.
+        services.AddScoped<IPartnerLookup, PartnerLookup>();
 
         services.AddScoped<IDumpFileStore, DumpFileStore>();
         services.AddScoped<IDumpBlockStore, DumpBlockStore>();

@@ -27,6 +27,14 @@ public sealed class SchemaParityTests : IClassFixture<RlsFixture>
         {
             "shopping_items", "ai_actions",
 
+            // M3. One table for tasks, reminders and commitments, so this entry
+            // covers three of the seven tools. Two of its columns are NOT NULL
+            // with defaults the entity states rather than inherits — kind and
+            // priority — which this check does not police; the enum mapping test
+            // does, because for those the risk is a wrong label rather than a
+            // missing one.
+            "tasks",
+
             // M1 identity. All five are inserted into during sign-in and
             // invitation, so every NOT NULL column without a default must be
             // mapped — the failure otherwise is a constraint violation at the
