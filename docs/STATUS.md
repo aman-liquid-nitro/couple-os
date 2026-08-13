@@ -1,6 +1,6 @@
 # Status
 
-**Updated:** 2026-08-12 · **Milestone:** M1 complete. M0 and M1 both fully met
+**Updated:** 2026-08-13 · **Milestone:** M2 in progress. M0 and M1 both fully met
 
 This file records **state**. [IMPLEMENTATION_PLAN.md](./IMPLEMENTATION_PLAN.md)
 records **intent** — what each milestone is for and how it ends. Read the plan
@@ -15,22 +15,27 @@ updated speculatively is worse than none.
 
 | | |
 |---|---|
-| Milestone | M1 (identity) complete; M0 before it |
-| Commits | 29 |
+| Milestone | M2 (capture surfaces) in progress; M0 and M1 closed |
+| Commits | 35 |
 | Architecture decisions | 13 |
-| Tests | 96, all shown capable of failing |
+| Tests | 141, all shown capable of failing (7 need a local Ollama and fail without one) |
 | Registered tools | 1 of 7 (`create_shopping_item`) |
-| Mapped tables | 8 of 28 (+ `users`, `couples`, `couple_members`, `auth_tokens`, `sessions`) |
+| Mapped tables | 11 of 28 (+ `users`, `couples`, `couple_members`, `auth_tokens`, `sessions`) |
 | Eval cases running | 4 of 55 |
 
-Two real people can now sign in with no password anywhere in the system, form a
-couple, and each write to it as themselves: text typed into a page is extracted
-by a model — local, or Ollama's hosted service so a laptop GPU is not saturated
-for the duration (ADR 0013) — validated and executed through the tool layer,
-written under row-level security scoped to whoever's session sent it, audited,
-and reported back in about three seconds.
+Two real people can sign in with no password anywhere in the system, form a
+couple, and each write to it as themselves. `shared.md` is now a file they both
+edit rather than a box that forgets: it opens holding what the couple has
+written, saves under an optimistic version so neither partner can silently erase
+the other, and Process turns it into blocks — one model call per block, one
+status per block, one transaction per block.
 
-**M1 is closed. The next branch is M2, capture surfaces.**
+The change report is built from the input rather than from the actions, which
+was the point of the milestone: a line no tool covers now appears in the report
+saying so, where it used to disappear without trace.
+
+**M2's shared surface is most of the way there. The file rewrite, the quick-add
+box, `needs_input` parking and the private thread are not built.**
 
 ---
 
@@ -71,6 +76,26 @@ class involving leaked password hashes.
 
 ---
 
+## M2 · Capture surfaces
+
+| Exit criterion | State |
+|---|---|
+| Both surfaces produce blocks | half — the shared file does; the private thread does not exist |
+| A second `Process` on an unchanged file creates nothing | done — asserted through the run, not through the index: one item, not two |
+| A correction line supersedes rather than duplicates | not started — needs `supersede`, which arrives with M3's tools |
+| **The report accounts for every block, including those that produced no tool call** | done — the report is built from blocks, and every block carries a status |
+
+**Also done, and not on the list:** the file model and its editor, `content_version`
+optimistic concurrency with a stale-version warning, one transaction per block,
+the run's counters and its report persisted to `dump_runs.report`.
+
+**Remaining:** the file rewrite in place (Inbox / Needs your input / Processed —
+`BlockSegmenter` already refuses to re-read those sections, so the reader half is
+built and the writer half is not), the quick-add box, `request_clarification` and
+the `needs_input` parking it fills, and the private chat surface.
+
+---
+
 ## What exists
 
 ### Database
@@ -83,7 +108,9 @@ class involving leaked password hashes.
 - `IScopedUnitOfWork` / `ICoupleTransaction` — every read and write passes through a transaction scoped with `set_config(..., true)`.
 - `ICoupleScopeAccessor` / `ICoupleScopeSetter` — reading and establishing the security context are separately grantable.
 - Tool pipeline — `ITool`, `IToolRegistry`, `IToolDispatcher`, `AuditingToolDispatcher`. Forbidden arguments and undeclared properties are refused by the dispatcher, not by each tool.
-- `ICaptureProcessor` — joins model to tool layer. Orchestrates only.
+- `ICaptureProcessor` — one press of Process: intake, then every pending block, then the run's counters and report. Orchestrates only; it never calls a model.
+- `IBlockProcessor` — one block from text to rows. The model call happens outside any transaction; the dispatches, the block's status and its entity links happen inside one; a block that throws is marked failed in a transaction of its own, because the failure being recorded is usually the failure that rolled the previous one back.
+- `ISharedFileEditor` — read and save `shared.md`. The version check is in the `UPDATE`'s `WHERE` clause, so two partners saving the same version produce exactly one winner. A refusal is a result, not an exception: the loser sees the partner's text and may save again on top of it deliberately (ADR 0009's last-write-wins-with-a-warning, both halves).
 - `CapturePrompt` — versioned (`2026-08-12.1`), because the eval set judges this exact text.
 
 ### Identity (M1)
@@ -103,7 +130,8 @@ class involving leaked password hashes.
 
 ### Web
 - Razor Pages + htmx, no Bootstrap or jQuery (ADR 0010). htmx vendored locally, not from a CDN.
-- One page: `shared.md` editor, Process button, change report.
+- One page: the `shared.md` editor, Save, Process, and a change report that lists every block under what became of it.
+- The file's version rides in a hidden field and is swapped back out of band by every response that writes — one partial owns that rule, because a response that changes the row and leaves the input alone makes the user's next press conflict with their own last one.
 - Sign in, check-your-email, callback, sign out, create couple, invite partner. Six screens, one input each.
 - `/health` — plain text, unauthenticated, backed by `DatabaseHealthCheck`. Runs `SELECT 1`, so a healthy answer means the app reached Postgres as the non-superuser role. `CanConnectAsync` was the obvious implementation and the wrong one: it swallows the provider exception and returns a bare false, discarding the only part worth reading.
 
@@ -122,10 +150,9 @@ class involving leaked password hashes.
 |---|---|
 | A profile screen — `display_name` is the email's local part and cannot be changed | M2 or later |
 | A session list, so "sign out everywhere" can be aimed rather than all-or-nothing | later |
-| Block segmentation, content hashing, re-`Process` doing nothing | M2 |
+| The file rewrite in place — Inbox / Needs your input / Processed sections | M2 |
+| The single-line quick-add box (ADR 0009 calls it not optional) | M2 |
 | The private chat surface | M2 |
-| `dump_files` / `dump_blocks` / `dump_runs` persistence | M2 |
-| Change report persisted to `dump_runs.report` | M2 |
 | `needs_input` parking and `request_clarification` implementation | M2 |
 | Six of seven tools — task, reminder, expense, event, memory, search | M3 |
 | Eval gates enforced as a build gate | M4 |
@@ -143,19 +170,19 @@ they are visible in one place rather than discoverable only by reading commits.
 1. **`action_outcome` has no `confirmation_required` label.** `AiActionAuditSink` throws rather than substituting a near-enough value. A migration is owed before the first `Confirm`-tier tool ships. *(ADR 0008, M3)*
 2. **`memories` is mapped read-only.** `type` and `content` are `NOT NULL` with no default and are unmapped, so `create_memory` cannot be written until the entity carries them. `SchemaParityTests` records this rather than tolerating it silently. *(M3)*
 3. **`/health` is unauthenticated, and must stay that way.** The container probe has no credentials, so `SessionAuthenticationMiddleware` allow-lists it. It returns one word and never the exception text the logs carry; anything richer added there is readable by anyone who can reach the port.
-4. **Data protection keys are not persisted.** The container writes them to `/home/app/.aspnet/DataProtection-Keys`, which dies with the container, so a page left open across `docker compose up --build` fails its next POST with a 400 antiforgery error. *Narrower than it first looked:* session cookies carry our own hashed token and are not data-protected, so a rebuild does **not** sign anyone out. Antiforgery only. *(M2)*
+4. ~~**Data protection keys are not persisted.**~~ **Paid.** A named volume holds the key ring, and the Dockerfile creates the directory owned by uid 1654 so the volume inherits that rather than being created root-owned. Verified the way it used to fail: a page rendered by one container still POSTs after `up -d --build`. It stopped being theoretical when it locked the sign-in form during M2's browser verification — the stale cookie is HttpOnly, so the only ways through were clearing cookies by hand or browsing from a different hostname.
 5. **The invitation email does not name the inviter.** `invitedByDisplayName` is passed as null, so every invitation reads "Your partner has invited you". Wiring it needs the sender's display name, which is currently an email local part anyway — worth doing with the profile screen, not before. *(M2)*
 
 **Design questions with a real answer needed later**
 
-6. **The change report describes actions, not input.** A line producing no tool call vanishes without trace — observed on the first real run, where an event silently disappeared. M2's exit criteria now require the report to account for every block. *(M2)*
-7. **One transaction per capture run.** Correct for a five-line note, questionable for a two-hundred-line dump where a late failure discards earlier successes. *(M2)*
+6. ~~**The change report describes actions, not input.**~~ **Paid.** The report is built from blocks: one status each, and a block that produced no tool call is rendered under "read, nothing to do" carrying the model's own words. Verified in the browser — the dinner line that started all this now reads *"create calendar event was not applied — No tool named 'create_calendar_event' is registered."*
+7. ~~**One transaction per capture run.**~~ **Paid.** Intake is atomic; processing takes one transaction per block, and a block that throws is marked failed in a transaction of its own. A late failure in a long dump no longer discards the successes before it, and a test asserts exactly that.
 8. **Prompt cost scales with the tool catalogue.** Measured 660 prompt tokens for 3 tools; 17 tools projects to ~3060 per block, and ~62s for a 20-block dump. Two levers recorded in ADR 0011: filter tools per block, or batch blocks per call. *(M3)*
 9. **`IScopedUnitOfWork` is a seam by convention, not construction.** Nothing stops a future caller injecting `CoupleOsDbContext` directly. Row-level security makes that fail closed rather than leak, so the consequence is an empty list rather than a breach — but the type system does not enforce it. `DatabaseHealthCheck` is now the only deliberate exception, and documents why it reads no rows. Identity is not a second one: it has its own context with no couple-scoped table on it, which is this same seam built by construction — the version worth copying if this debt is ever paid.
 
 **Smaller**
 
-10. **`CaptureProcessor` has no unit tests.** Its behaviour is only covered by the manual browser run and indirectly by the pipeline tests. It was built to be testable against a fake provider; that test has not been written.
+10. ~~**`CaptureProcessor` has no unit tests.**~~ **Paid.** `BlockProcessorStatusTests` and `BlockProcessorAttributionTests` run the pipeline against fakes — no database, no GPU, 55 unit tests in 80ms. The status rules are decided in C# and are asserted there rather than through a model that might disagree with itself twice in a row.
 11. **Three AI provider tests each make a separate model call** for what is one call's worth of assertions — about 6s of GPU per run, and three chances for a non-deterministic model to disagree with itself.
 12. **`LlmUsage.Duration` includes HTTP and deserialisation**, so it reads slightly high. Fine for cost auditing, misleading as a benchmark.
 13. **`Temperature = 0` is hard-coded** in `OllamaLlmProvider` rather than an option. Right for extraction; the wrong place for the decision to live if the chat surface ever wants warmth.
@@ -169,6 +196,9 @@ they are visible in one place rather than discoverable only by reading commits.
 21. **The eval set still encodes the pre-fix date contract.** Eight cases in `data/eval-cases.jsonl` expect resolved timestamps — `"due_at": "2026-08-12"`, `"starts_at": "2026-12-14"` — which is now the behaviour TOOLS.md forbids. They are inert because those tools are unregistered and `EvalCoverage` reports them blocked, so M3 unblocks tests that assert the wrong thing. Two problems, not one: the contract is wrong *and* a hard-coded absolute date rots as "today" moves. Not rewritten here — expectations are a measurement decision, and they belong with the milestone that registers the tools and can watch them pass. *(M3)*
 22. **Date resolution has nowhere to live.** TOOLS.md now declares expression fields on all eight date arguments, and the resolver they imply does not exist. It needs the couple's timezone, which `ToolExecutionContext` does not carry — `couples.timezone` and `users.timezone` are in the schema and unread. Owed before the first date-bearing tool ships. *(M3)*
 23. **No CI.** Deliberately deferred. "CI gate" currently means a command someone remembers to run.
+24. **A failed or ignored block is never retried.** `PendingAsync` reads `unprocessed`, so a block that failed because Ollama was unreachable stays failed, and pressing Process again does nothing for it. Deliberate — a blanket retry would re-run every ignored heading — but the user has no way to say "try that one again", and the only workaround is to retype the line so it hashes differently. *(M2 or M3)*
+25. **A run's cost is now per block, and it shows.** Eleven blocks took 26.9s against `gemma4:31b` at ~2.4s each, with the full tool catalogue in every prompt. This is debt 8 arriving as a measurement rather than a projection: the levers in ADR 0011 — filter tools per block, or batch blocks per call — are the same, and the second one trades away the per-block status this milestone was built for. *(M3)*
+26. **Two test classes share a serialized collection because they share one row.** `shared.md` is one row per couple, so `SharedFileEditorTests` and `CaptureIntakeTests` cannot run in parallel against the fixture couple. Correct and cheap today; the honest fix is a couple per test class, and it is not worth building until the suite is slow enough to care.
 
 ---
 
@@ -186,3 +216,5 @@ they are visible in one place rather than discoverable only by reading commits.
 - Making registration and sign-in one code path removes enumeration as a *category* rather than mitigating it. There is no "address not found" branch to have different timing, so nothing has to be padded or constant-timed.
 - `Secure` cookies work over `http://localhost` — browsers treat localhost as a secure context — so the attribute needs no environment switch, and therefore cannot be misconfigured in one.
 - `SameSite=Strict` would break magic links. The cookie is set on a response to a top-level navigation from a mail client; under Strict it is withheld on the redirect that follows, and a valid link lands back on the sign-in page.
+- **Docker seeds a new named volume from the image directory it covers, ownership included — but only if that directory exists in the image.** Mount a volume over a path the image does not have and Docker creates it root-owned, so a container running as a non-root user cannot write to its own volume. The fix is a `mkdir` and a `chown` at build time, not a runtime workaround.
+- A count derived by subtraction lies as soon as the two quantities stop measuring the same set. `AlreadyRecorded` was blocks-seen minus blocks-handled, which went negative the first time a run picked up a block the file no longer contained — and a negative count rendered as nothing at all, so the report looked correct. Found by reading the running page, not by a test.
