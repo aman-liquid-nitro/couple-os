@@ -84,6 +84,21 @@ public static partial class BlockSegmenter
     ];
 
     /// <summary>
+    /// A heading's title, or null when the line is not a heading. Public for the
+    /// same reason as <see cref="RoleOf"/>: what counts as a heading is decided
+    /// here, and a caller re-deciding it is a caller that will eventually decide
+    /// differently.
+    /// </summary>
+    public static string? TitleOf(string line)
+    {
+        ArgumentNullException.ThrowIfNull(line);
+
+        var heading = Heading.Match(line.TrimEnd('\r'));
+
+        return heading.Success ? heading.Groups["title"].Value.Trim() : null;
+    }
+
+    /// <summary>
     /// The section a heading line opens, or null when the line is not a heading.
     ///
     /// Public because <see cref="FileRewriter"/> needs the same answer this class
@@ -93,16 +108,10 @@ public static partial class BlockSegmenter
     /// </summary>
     public static SectionRole? RoleOf(string line)
     {
-        ArgumentNullException.ThrowIfNull(line);
-
-        var heading = Heading.Match(line.TrimEnd('\r'));
-
-        if (!heading.Success)
+        if (TitleOf(line) is not { } title)
         {
             return null;
         }
-
-        var title = heading.Groups["title"].Value.Trim();
 
         foreach (var (prefix, role) in OutputSections)
         {

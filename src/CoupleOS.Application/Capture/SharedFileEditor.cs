@@ -44,6 +44,28 @@ public interface ISharedFileEditor
         string content,
         int expectedVersion,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Adds one line to the inbox, taking no version from the caller.
+    ///
+    /// Deliberately a different operation from <see cref="SaveAsync"/> rather than
+    /// a convenience over it. A save replaces the file, so two of them conflict and
+    /// somebody has to be told. An append does not: both lines belong in the file,
+    /// so last-write-wins is not a policy here, it is data loss. ADR 0009 asks for
+    /// no state and no response, and the reason it can have neither is that there
+    /// is no conflict to report.
+    ///
+    /// So a refused version is retried rather than surfaced — re-read, re-splice,
+    /// write again — and the retry is safe precisely because the operation adds a
+    /// line rather than asserting the whole file.
+    /// </summary>
+    /// <returns>
+    /// The file after the line landed, so the editor open on the same screen can
+    /// be brought up to date. Null when the line was blank and nothing was written.
+    /// </returns>
+    Task<SharedFileView?> QuickAddAsync(
+        string? line,
+        CancellationToken cancellationToken = default);
 }
 
 public sealed class SharedFileEditor(
@@ -90,5 +112,52 @@ public sealed class SharedFileEditor(
         return new SharedFileSave(
             save.Accepted,
             new SharedFileView(save.File.Content, save.File.ContentVersion, save.File.LastProcessedAt));
+    }
+
+    /// <summary>
+    /// Read under a row lock, splice, write. One attempt, no retry, no branch for
+    /// losing — because holding the lock means there is nobody to lose to.
+    ///
+    /// The first version of this was optimistic with a bounded retry, and it
+    /// starved: twelve concurrent appends leave the unlucky writers exhausting
+    /// their attempts while the lucky ones keep winning. The integration test that
+    /// found it is the same shape as M1's magic-link one, and taught the same
+    /// lesson — a sequential test passes either way, and only contention tells you
+    /// which model you actually chose.
+    /// </summary>
+    public async Task<SharedFileView?> QuickAddAsync(
+        string? line,
+        CancellationToken cancellationToken = default)
+    {
+        await using var transaction = await _unitOfWork.BeginAsync(cancellationToken);
+
+        var file = await _files.GetSharedForUpdateAsync(cancellationToken);
+        var appended = QuickAdd.Append(file.Content, line);
+
+        if (appended is null)
+        {
+            // An empty box. Committed rather than rolled back for the same reason a
+            // refused save is: rows were read, nothing was written, and there is no
+            // failure to report. The lock is released by the commit.
+            await transaction.CommitAsync(cancellationToken);
+
+            return null;
+        }
+
+        // The version check in here cannot fail while the lock is held, which is
+        // the point. It stays because the day somebody calls this without the lock,
+        // a refusal is a far better outcome than a silent overwrite.
+        var save = await _files.SaveSharedAsync(appended, file.ContentVersion, cancellationToken);
+
+        await transaction.CommitAsync(cancellationToken);
+
+        if (!save.Accepted)
+        {
+            throw new InvalidOperationException(
+                "shared.md changed while this append held a lock on it, which should not be possible. " +
+                "Either the lock was not taken or the append ran outside a transaction.");
+        }
+
+        return new SharedFileView(save.File.Content, save.File.ContentVersion, save.File.LastProcessedAt);
     }
 }

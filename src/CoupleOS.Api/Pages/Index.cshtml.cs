@@ -46,6 +46,14 @@ public sealed class IndexModel(
     [BindProperty]
     public int Version { get; set; }
 
+    /// <summary>
+    /// The quick-add box. Carries no version, by design — an append cannot
+    /// conflict with anything, so there is nothing for the browser to hold on to
+    /// between one thought and the next (ADR 0009).
+    /// </summary>
+    [BindProperty]
+    public string? Line { get; set; }
+
     public async Task OnGetAsync(CancellationToken cancellationToken)
     {
         var file = await _sharedFile.ReadAsync(cancellationToken);
@@ -59,6 +67,21 @@ public sealed class IndexModel(
         var save = await _sharedFile.SaveAsync(Text ?? string.Empty, Version, cancellationToken);
 
         return Partial("_SaveState", save);
+    }
+
+    /// <summary>
+    /// One line in, nothing to read back. The response exists only to keep the
+    /// editor on the same screen honest: the file now has a line the textarea does
+    /// not, and a Save from that stale box would delete it.
+    /// </summary>
+    public async Task<IActionResult> OnPostQuickAddAsync(CancellationToken cancellationToken)
+    {
+        var file = await _sharedFile.QuickAddAsync(Line, cancellationToken);
+
+        // A blank box is not an error and not an event. Nothing was written, so
+        // nothing needs swapping — and re-reading the file to say so would be a
+        // query per stray keypress on the Enter key.
+        return file is null ? new EmptyResult() : Partial("_QuickAddResult", file);
     }
 
     public async Task<IActionResult> OnPostProcessAsync(CancellationToken cancellationToken)

@@ -1,0 +1,28 @@
+@using CoupleOS.Application.Capture
+@model SharedFileView
+
+@*
+    Quick-add has no response to read, per ADR 0009 — everything here is
+    housekeeping on a screen that happens to also be showing the file.
+
+    The version and the textarea move together, and both have to move. The file
+    gained a line the box does not have, so a Save from that box would delete it —
+    the same hazard the rewrite has, and the same fix. On a phone, where quick-add
+    earns its place and the editor is not what the user is looking at, none of this
+    is visible.
+*@
+
+@await Html.PartialAsync("_Version", Model.Version)
+
+<textarea name="Text" id="Text" hx-swap-oob="true">@Model.Content</textarea>
+
+@* Emptied so the next thought can be typed straight in. hx-swap-oob replaces the
+   element, so the value has to be re-stated as an attribute rather than cleared. *@
+<input type="text" name="Line" id="Line" value=""
+       placeholder="one thing, then Enter" autocomplete="off"
+       hx-post="/?handler=QuickAdd" hx-target="#quick-add-state" hx-swap="innerHTML"
+       hx-swap-oob="true" />
+
+<div id="save-state" class="muted" hx-swap-oob="true"></div>
+
+<span class="muted">added · version @Model.Version</span>

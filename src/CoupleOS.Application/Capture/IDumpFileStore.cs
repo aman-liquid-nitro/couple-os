@@ -34,6 +34,27 @@ public interface IDumpFileStore
     Task<DumpFile> GetOrCreateSharedAsync(CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// The couple's shared.md, read under a row lock that is held until the
+    /// transaction ends.
+    ///
+    /// For appends, and appends only. Optimistic concurrency is the right model
+    /// for a save — two people replacing the same file genuinely conflict, and one
+    /// of them has to be told. It is the wrong model for adding a line: there is no
+    /// conflict to resolve, both lines belong in the file, and a version check can
+    /// only ever refuse work that should have happened.
+    ///
+    /// Retrying the refusal instead was the first attempt and it starved: twelve
+    /// concurrent appends against a bounded retry means the unlucky ones exhaust
+    /// their attempts while the lucky ones keep winning, which is a livelock with
+    /// a timeout bolted on. Taking the lock turns the same contention into a queue
+    /// — each writer waits for the one in front, and every line lands.
+    ///
+    /// The cost is that a concurrent Save blocks for the length of an append, which
+    /// is one round trip and no statement in between.
+    /// </summary>
+    Task<DumpFile> GetSharedForUpdateAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Writes the shared file, but only if <paramref name="expectedVersion"/> is
     /// still the version the database holds.
     ///

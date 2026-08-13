@@ -7,6 +7,20 @@
     Write anything. Press Process when you are done — nothing happens until you do.
 </p>
 
+@* Quick-add, and first on the page on purpose: ADR 0009 makes it not optional
+   because a thought captured standing in a doorway is the thing V0 is testing,
+   and it must not cost more than one tap and one line. Its own form, so Enter
+   inside it adds a line instead of pressing Process — which is the whole
+   difference between a capture box and a nine-hundred-line textarea. *@
+
+<form id="quick-add" method="post" hx-post="/?handler=QuickAdd"
+      hx-target="#quick-add-state" hx-swap="innerHTML">
+    <input type="text" name="Line" id="Line"
+           placeholder="one thing, then Enter" autocomplete="off" />
+    <button type="submit">Add</button>
+    <span id="quick-add-state" class="muted"></span>
+</form>
+
 @* The textarea is the file, not a message box: it opens holding whatever the
    couple has written so far, and both partners are looking at the same text.
    Version travels with it so the server can tell a stale save from a current

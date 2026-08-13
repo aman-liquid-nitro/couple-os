@@ -16,9 +16,9 @@ updated speculatively is worse than none.
 | | |
 |---|---|
 | Milestone | M2 (capture surfaces) in progress; M0 and M1 closed |
-| Commits | 37 |
+| Commits | 38 |
 | Architecture decisions | 13 |
-| Tests | 163, all shown capable of failing (7 need a local Ollama and fail without one) |
+| Tests | 181, all shown capable of failing (7 need a local Ollama and fail without one) |
 | Registered tools | 1 of 7 (`create_shopping_item`) |
 | Mapped tables | 11 of 28 (+ `users`, `couples`, `couple_members`, `auth_tokens`, `sessions`) |
 | Eval cases running | 4 of 55 |
@@ -40,8 +40,12 @@ the inbox, and the inbox is what is left to do. That makes the file itself the
 durable record — before it, closing the tab left the change report as a JSON
 column nothing renders.
 
-**M2's shared surface is most of the way there. The quick-add box,
-`needs_input` parking and the private thread are not built.**
+Quick-add is in: one line, one tap, no version to carry and nothing to read
+back. ADR 0009 calls it not optional because a thought captured in a doorway is
+what V0 is testing, and it must not cost more than that.
+
+**M2's shared surface is done. `needs_input` parking and the private thread are
+not built.**
 
 ---
 
@@ -91,14 +95,15 @@ class involving leaked password hashes.
 | A correction line supersedes rather than duplicates | not started — needs `supersede`, which arrives with M3's tools |
 | **The report accounts for every block, including those that produced no tool call** | done — the report is built from blocks, and every block carries a status |
 | **`Process` rewrites the file in place** | done — settled lines archived, failed ones left in the inbox |
+| **Quick-add** | done — one line, appended into the inbox, no version to carry and nothing to read back |
 
 **Also done, and not on the list:** the file model and its editor, `content_version`
 optimistic concurrency with a stale-version warning, one transaction per block,
 the run's counters and its report persisted to `dump_runs.report`.
 
-**Remaining:** the quick-add box, `request_clarification` and the `needs_input`
-parking it fills (the writer for that section exists and nothing fills it yet),
-and the private chat surface.
+**Remaining:** `request_clarification` and the `needs_input` parking it fills
+(the writer for that section exists and nothing fills it yet), and the private
+chat surface.
 
 ---
 
@@ -118,6 +123,7 @@ and the private chat surface.
 - `IBlockProcessor` — one block from text to rows. The model call happens outside any transaction; the dispatches, the block's status and its entity links happen inside one; a block that throws is marked failed in a transaction of its own, because the failure being recorded is usually the failure that rolled the previous one back.
 - `FileRewriter` — the writer half of `BlockSegmenter`, and its mirror: pure, static, and sharing one classifier (`BlockSegmenter.RoleOf`) rather than reimplementing "is this section ours". Settled blocks move into a dated `## Processed` section, parked ones into `## Needs your input`, and **failed ones stay in the inbox** because the inbox is what the file says is outstanding. Everything else — the couple's own headings, their blank lines — is left verbatim; the only reordering is lifting the inbox back above the archive, because an inbox below three months of history is an inbox nobody writes in from a phone. Matched by hash, never by the line numbers recorded when the block was first seen, because the file has been edited since.
 - The rewrite's read and write share one transaction and the write carries the version the read returned, so a partner saving mid-run is refused exactly as they would be in the editor — `PartnerSavedFirst`, reported on the page, retried by the next Process. Rewriting from a stale copy is how a run would silently delete a line somebody had just typed.
+- `QuickAdd` — one line into the inbox, spliced rather than re-rendered, so an append cannot reflow a file somebody is mid-sentence in. Appending at the *end* of the file is the obvious implementation and is wrong: after one run the end of the file is inside the archive, which the segmenter refuses to read, so every quick-added line would be stored, displayed, and never processed. The entry is written as a list item so that a line quick-added and the same words typed into the editor hash to one block rather than two.
 - `ISharedFileEditor` — read and save `shared.md`. The version check is in the `UPDATE`'s `WHERE` clause, so two partners saving the same version produce exactly one winner. A refusal is a result, not an exception: the loser sees the partner's text and may save again on top of it deliberately (ADR 0009's last-write-wins-with-a-warning, both halves).
 - `CapturePrompt` — versioned (`2026-08-12.1`), because the eval set judges this exact text.
 
@@ -172,6 +178,11 @@ and the private chat surface.
 Each of these is deliberate and recorded where the code lives. Listed here so
 they are visible in one place rather than discoverable only by reading commits.
 
+**Numbers are never reused and never renumbered.** Code comments cite them —
+`STATUS debt 8`, `debt 22`, `debt 24` — so a new entry takes the next free number
+whichever section it belongs in, and a renumbering would silently repoint every
+citation at the wrong paragraph.
+
 **Blocking a specific future step**
 
 1. **`action_outcome` has no `confirmation_required` label.** `AiActionAuditSink` throws rather than substituting a near-enough value. A migration is owed before the first `Confirm`-tier tool ships. *(ADR 0008, M3)*
@@ -186,6 +197,8 @@ they are visible in one place rather than discoverable only by reading commits.
 7. ~~**One transaction per capture run.**~~ **Paid.** Intake is atomic; processing takes one transaction per block, and a block that throws is marked failed in a transaction of its own. A late failure in a long dump no longer discards the successes before it, and a test asserts exactly that.
 8. **Prompt cost scales with the tool catalogue.** Measured 660 prompt tokens for 3 tools; 17 tools projects to ~3060 per block, and ~62s for a 20-block dump. Two levers recorded in ADR 0011: filter tools per block, or batch blocks per call. *(M3)*
 9. **`IScopedUnitOfWork` is a seam by convention, not construction.** Nothing stops a future caller injecting `CoupleOsDbContext` directly. Row-level security makes that fail closed rather than leak, so the consequence is an empty list rather than a breach — but the type system does not enforce it. `DatabaseHealthCheck` is now the only deliberate exception, and documents why it reads no rows. Identity is not a second one: it has its own context with no couple-scoped table on it, which is this same seam built by construction — the version worth copying if this debt is ever paid.
+29. **Nothing decays, and nothing goes stale.** A preference recorded in March and one recorded yesterday are both simply live. `search_memory`'s ranking blends recency, so an old memory sorts lower — but sorting is not expiring, and nothing distinguishes "still true, just old" from "was true once". Three shapes of one gap, wanting one answer rather than three: a `temporary_context` memory has no expiry (SPEC.md §8 names the type; nothing ages it out), an `inferred` memory is never re-asked even though ADR 0006 says confirming one is how it becomes fact, and a preference contradicted only *implicitly* — by later behaviour rather than by a sentence — never supersedes, because `supersede` fires on an explicit contradiction and silence is not one. This is ADR 0006's own corrosive example wearing a different hat: not a guess promoted to fact, but a fact nobody noticed had lapsed. Needs a corpus before it can be designed against, which is the same reason contradiction handling (SPEC.md §45) is cut from V0 — so the honest sequence is a week of real use first. *(V1)*
+30. **The shared surface can only be written to, never asked.** `shared.md` captures; the private thread converses. So the only way to ask what the couple knows is to ask in a private thread — correct and intended (see below), and still an odd shape to explain to a user: *ask your private assistant what we both know*. A `Process` run answers no questions, and "what do we know about Priya's parents" is a block the model reads and ignores. M5's read surface answers the browsing half of this; nothing in the plan gives the shared surface a query path, and two people looking at one file together is exactly where one would be asked for. *(M5, or a deliberate no)*
 
 **Smaller**
 
@@ -222,10 +235,12 @@ they are visible in one place rather than discoverable only by reading commits.
 - `mcr.microsoft.com/dotnet/aspnet:10.0` contains no HTTP client. Verified: no curl, no wget, no netcat. Only `openssl`, which cannot speak plain HTTP.
 - `DbContext.Database.CanConnectAsync()` returns false rather than throwing, discarding the reason. Anything that needs to report *why* the database is unreachable has to issue the statement itself.
 - **EF Core orders inserts by the relationships in the model, not by the database's foreign keys.** Two entities inserted in one `SaveChanges` with no declared relationship between them get an arbitrary order — here, `couple_members` before `couples`, failing on the FK every time. Declaring `HasOne<Couple>().WithMany().HasForeignKey(...)` fixes the ordering; no navigation property is needed, or wanted.
+- **Shared knowledge is readable from a private thread, and that is the intended direction.** Scope is asymmetric on purpose: a search from a private thread sees that partner's private rows *plus* the shared ones, and a search from `shared.md` sees only shared ones. Confirmed as correct rather than tolerated — a private conversation that could not consult what the couple jointly knows would be useless as a thinking partner, and it leaks nothing, because the flow is private-reads-shared. The direction that must never open is the reverse, and `share_memory` is the only path across it: user-initiated, `confirm`-tier, warned as irreversible.
 - Making registration and sign-in one code path removes enumeration as a *category* rather than mitigating it. There is no "address not found" branch to have different timing, so nothing has to be padded or constant-timed.
 - `Secure` cookies work over `http://localhost` — browsers treat localhost as a secure context — so the attribute needs no environment switch, and therefore cannot be misconfigured in one.
 - `SameSite=Strict` would break magic links. The cookie is set on a response to a top-level navigation from a mail client; under Strict it is withheld on the redirect that follows, and a valid link lands back on the sign-in page.
 - **Docker seeds a new named volume from the image directory it covers, ownership included — but only if that directory exists in the image.** Mount a volume over a path the image does not have and Docker creates it root-owned, so a container running as a non-root user cannot write to its own volume. The fix is a `mkdir` and a `chown` at build time, not a runtime workaround.
+- **Optimistic concurrency is for replacing, and a lock is for appending.** Two partners saving the same file genuinely conflict and one has to be told; two partners adding a line do not, and a version check there can only refuse work that should have happened. Retrying the refusal was the first implementation and it starved — twelve concurrent appends leave the unlucky writers exhausting their attempts while the lucky ones keep winning, a livelock with a timeout bolted on. `SELECT … FOR UPDATE` turns the same contention into a queue and every line lands. The sequential test passed under both designs; only the contended one said which had been chosen. Same lesson as M1's magic links, opposite conclusion, because the operation is different.
 - **A file the system writes is a file the system reads back, and the loop has to be closed by a test rather than by care.** The rewrite's output is the next run's input. A rewrite producing anything the segmenter reads as input would put the whole archive through a model call on every press of Process, and the dedup index would hide it perfectly — no duplicate rows, just a run that got slower every day. The assertion that matters is not "the output looks right" but `Segment(Rewrite(x))` containing only what is genuinely unfinished.
 - Reader and writer of the same format need one classifier, not two agreeing ones. `BlockSegmenter.RoleOf` is public for that reason alone: a second implementation of "is this heading one of ours" is a second chance to disagree, and disagreement here is the failure above.
 - A count derived by subtraction lies as soon as the two quantities stop measuring the same set. `AlreadyRecorded` was blocks-seen minus blocks-handled, which went negative the first time a run picked up a block the file no longer contained — and a negative count rendered as nothing at all, so the report looked correct. Found by reading the running page, not by a test.

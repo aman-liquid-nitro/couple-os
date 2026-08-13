@@ -176,6 +176,86 @@ public sealed class SharedFileEditorTests : IClassFixture<RlsFixture>
         Assert.Equal(winner.File.Content, current.Content);
     }
 
+    private static Task<SharedFileView?> QuickAddAsync(
+        ServiceProvider provider, Guid couple, Guid user, string line) =>
+        Task.Run(async () =>
+        {
+            await using var request = BeginRequest(provider, couple, user);
+            return await request.ServiceProvider.GetRequiredService<ISharedFileEditor>().QuickAddAsync(line);
+        });
+
+    [Fact]
+    public async Task A_quick_added_line_lands_where_a_run_will_read_it()
+    {
+        await using var provider = BuildProvider();
+
+        var line = $"detergent {Nonce()}";
+
+        // The state that makes placement non-obvious: a file whose last line is
+        // inside a section the segmenter refuses to read.
+        var opened = await ReadAsync(provider, RlsFixture.Couple1, RlsFixture.PartnerA);
+        await SaveAsync(
+            provider, RlsFixture.Couple1, RlsFixture.PartnerA,
+            "## Processed — 12 Aug 2026\n- ~~old~~ → shopping: old",
+            opened.Version);
+
+        var after = await QuickAddAsync(provider, RlsFixture.Couple1, RlsFixture.PartnerA, line);
+
+        Assert.NotNull(after);
+        Assert.Equal(opened.Version + 2, after.Version);
+
+        // Readable, which is the only assertion that means anything here. Stored
+        // but unreadable is the silent failure, and it looks identical from the row.
+        Assert.Contains(
+            BlockSegmenter.Segment(after.Content),
+            b => b.RawText.Contains(line, StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task Two_partners_adding_at_the_same_moment_both_keep_their_line()
+    {
+        await using var provider = BuildProvider();
+
+        var run = Nonce();
+
+        var opened = await ReadAsync(provider, RlsFixture.Couple1, RlsFixture.PartnerA);
+        await SaveAsync(provider, RlsFixture.Couple1, RlsFixture.PartnerA, "## Inbox", opened.Version);
+
+        // Twelve at once, as the magic-link concurrency test does, because this is
+        // the same shape of claim: an append is not a save, so "one winner" is the
+        // wrong answer. Both lines belong in the file. A read-modify-write with no
+        // retry passes a sequential test and loses a line here.
+        var lines = Enumerable.Range(0, 12).Select(i => $"item {i} {run}").ToList();
+
+        await Task.WhenAll(lines.Select(line =>
+            QuickAddAsync(provider, RlsFixture.Couple1, RlsFixture.PartnerA, line)));
+
+        var current = await ReadAsync(provider, RlsFixture.Couple1, RlsFixture.PartnerA);
+
+        Assert.All(lines, line => Assert.Contains(line, current.Content, StringComparison.Ordinal));
+
+        // And each is its own block, not twelve lines fused into one entry.
+        Assert.Equal(
+            lines.Count,
+            BlockSegmenter.Segment(current.Content)
+                .Count(b => b.RawText.Contains(run, StringComparison.Ordinal)));
+    }
+
+    [Fact]
+    public async Task An_empty_quick_add_writes_nothing()
+    {
+        await using var provider = BuildProvider();
+
+        var opened = await ReadAsync(provider, RlsFixture.Couple1, RlsFixture.PartnerA);
+
+        Assert.Null(await QuickAddAsync(provider, RlsFixture.Couple1, RlsFixture.PartnerA, "   "));
+
+        // Not even a version bump. Enter on an empty box is not an event, and a
+        // bump would make the other partner's open editor stale for nothing.
+        var current = await ReadAsync(provider, RlsFixture.Couple1, RlsFixture.PartnerA);
+        Assert.Equal(opened.Version, current.Version);
+    }
+
     [Fact]
     public async Task One_couples_file_is_invisible_to_another()
     {

@@ -60,6 +60,26 @@ public sealed class DumpFileStore(
                 "The couple scope and the row's couple_id disagree.");
     }
 
+    public async Task<DumpFile> GetSharedForUpdateAsync(CancellationToken cancellationToken = default)
+    {
+        var file = await GetOrCreateSharedAsync(cancellationToken);
+
+        // Lock first, then re-read. The other order locks a row whose content this
+        // request has already read, which is the stale-read the lock exists to
+        // prevent — the reload is the part that has to happen while holding it.
+        //
+        // SELECT 1 rather than SELECT content, because the value comes back through
+        // the change tracker on the reload below and a second copy of it here would
+        // be a second thing that could be the one somebody uses.
+        await _dbContext.Database.ExecuteSqlAsync(
+            $"SELECT 1 FROM dump_files WHERE id = {file.Id} FOR UPDATE",
+            cancellationToken);
+
+        await _dbContext.Entry(file).ReloadAsync(cancellationToken);
+
+        return file;
+    }
+
     public async Task<DumpFileSave> SaveSharedAsync(
         string content,
         int expectedVersion,
