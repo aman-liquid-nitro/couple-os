@@ -455,6 +455,17 @@ CREATE TABLE conversation_sessions (
     ended_at   timestamptz
 );
 
+-- ADR 0009: one thread per partner. Partial on ended_at so that ending a thread
+-- and starting a fresh one stays possible without dropping the guarantee that
+-- there is only ever one *open* thread to append to.
+--
+-- Without this, one partner with two tabs open creates two threads and each tab
+-- talks to a different history. Two partners cannot collide here — the index is
+-- per member — so this is a single-user race, which is exactly the kind that
+-- reaches production because nobody thinks to test it.
+CREATE UNIQUE INDEX conversation_sessions_one_open_per_member
+    ON conversation_sessions (couple_id, user_id) WHERE ended_at IS NULL;
+
 CREATE TABLE conversation_messages (
     id             uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     session_id     uuid         NOT NULL REFERENCES conversation_sessions(id) ON DELETE CASCADE,
@@ -738,15 +749,33 @@ ALTER TABLE conversation_sessions  FORCE  ROW LEVEL SECURITY;
 CREATE POLICY couple_scope ON conversation_sessions
     USING (couple_id = app_current_couple() AND user_id = app_current_user());
 
+-- Scoped by the SESSION the message belongs to, not by who authored it.
+--
+-- This policy used to read `... OR user_id = app_current_user() OR user_id IS
+-- NULL`, with a comment claiming the NULL branch covered "assistant/system turns
+-- in the caller's session". It never joined conversation_sessions, so it covered
+-- assistant turns in ANYBODY's session. Proved against the running database as
+-- app_user before the chat surface was built: partner B could not see partner
+-- A's session or A's own message, and could read the assistant's reply inside A's
+-- private thread — a reply which by its nature restates what A just said. That
+-- is ADR 0009's unrecoverable failure, the leaked surprise, reachable by SELECT.
+--
+-- A message has exactly one session (session_id is NOT NULL) and a session has
+-- exactly one owner, so the session is the only correct unit of privacy here.
+-- The `visibility = 'shared_couple'` branch is gone with it: a message sitting in
+-- one partner's private thread is private whatever its visibility column says,
+-- and that column's job is to set the scope of the RECORDS the turn produces
+-- (ADR 0009), not to decide who may read the transcript. A shared conversation
+-- surface, if one is ever built, gets sessions of its own to be scoped by.
 ALTER TABLE conversation_messages  ENABLE ROW LEVEL SECURITY;
 ALTER TABLE conversation_messages  FORCE  ROW LEVEL SECURITY;
 CREATE POLICY couple_scope ON conversation_messages
     USING (
         couple_id = app_current_couple()
-        AND (
-            visibility = 'shared_couple'
-            OR user_id  = app_current_user()
-            OR user_id IS NULL          -- assistant/system turns in the caller's session
+        AND EXISTS (
+            SELECT 1 FROM conversation_sessions s
+            WHERE s.id = conversation_messages.session_id
+              AND s.user_id = app_current_user()
         )
     );
 

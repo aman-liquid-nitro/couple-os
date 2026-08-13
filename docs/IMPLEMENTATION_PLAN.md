@@ -201,6 +201,18 @@ call.**
 > what makes that possible: every block carries a status, so silence becomes
 > impossible to render.
 
+> **On "both surfaces produce blocks", written after building them.** The private
+> thread produces `conversation_messages`, not `dump_blocks`, and the difference
+> is forced rather than chosen: `dump_blocks_dedup` is unique per file and
+> content hash, so a repeated line in a conversation would collide with its
+> earlier self and disappear. Repetition is noise in a dump file and meaning in a
+> chat. The invariant this criterion is actually reaching for is the clause after
+> it — one validate → authorize → execute → audit path — and that holds: one
+> registry, one dispatcher, one audit sink, with `visibility` injected from the
+> surface on both. STATUS.md records the reading; the wording here is left as it
+> was written, because a plan edited to match what got built stops being a record
+> of intent.
+
 ---
 
 ## M3 · The seven tools

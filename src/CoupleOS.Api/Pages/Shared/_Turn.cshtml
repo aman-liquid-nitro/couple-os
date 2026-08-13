@@ -1,0 +1,47 @@
+@using CoupleOS.Application.Conversation
+@using CoupleOS.Application.Tools
+@model ConversationTurn
+
+@*
+    One exchange, appended to the thread.
+
+    Both halves are rendered from the returned turn rather than re-read from the
+    database: the rows are already committed, and a re-read would be a second
+    query for text this response is holding.
+*@
+
+<li class="turn said">
+    <span class="who muted">you</span>
+    <span class="what">@Model.Said.Content</span>
+</li>
+
+<li class="turn reply @(Model.Failed ? "warning" : "")">
+    <span class="who muted">assistant</span>
+    <span class="what">@Model.Reply.Content</span>
+
+    @*
+        What actually changed, printed beside the reply and never folded into it.
+
+        The reply is the model's prose and this is the record, and the gap between
+        them is the point: a model that writes "added that to your list" without
+        calling the tool is the failure SPEC.md 46 forbids, and the only way this
+        screen can contradict it is by showing both. A question is left out — it
+        IS the reply on this surface (ADR 0009's in-band clarification), and
+        printing it twice would read as the assistant asking twice.
+    *@
+    @{
+        var recorded = Model.Changes.Where(c => !c.IsQuestion).ToList();
+    }
+
+    @if (recorded.Count > 0)
+    {
+        <ul class="changes">
+            @foreach (var change in recorded)
+            {
+                <li class="@(change.Outcome == ToolOutcome.Success ? "" : "warning")">
+                    @change.Description
+                </li>
+            }
+        </ul>
+    }
+</li>

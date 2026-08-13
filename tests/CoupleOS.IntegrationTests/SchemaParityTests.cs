@@ -38,6 +38,13 @@ public sealed class SchemaParityTests : IClassFixture<RlsFixture>
             // them, not less: nothing in the ORM would notice a column added to
             // data/schema.sql that a hand-written INSERT does not name.
             "dump_files", "dump_runs", "dump_blocks",
+
+            // M2's private surface, also inserted through raw SQL. The one that
+            // would bite here is session_id: it is NOT NULL with no default, and
+            // it is what the row-level security policy scopes reads by, so a
+            // column this model failed to carry would be a message with no
+            // privacy rather than merely a failed insert.
+            "conversation_sessions", "conversation_messages",
         };
 
     /// <summary>

@@ -110,6 +110,30 @@ INSERT INTO plans (id,couple_id,visibility,name) VALUES
 INSERT INTO plan_items (plan_id,entity_type,label) VALUES
  ('9222e222-2222-2222-2222-222222222222','note','C1 SECRET: proposal at the lake');
 
+-- Two private threads in one couple, one per partner (ADR 0009).
+--
+-- The assistant turns are the point. They carry user_id IS NULL, because no
+-- human typed them, and they restate what the person just said — so a policy
+-- that lets them through by authorship rather than by session hands the partner
+-- a paraphrase of the surprise. Section H is what pins that shut.
+INSERT INTO conversation_sessions (id,couple_id,user_id) VALUES
+ ('9333e333-3333-3333-3333-333333333333',:C1,:UA),
+ ('9444e444-4444-4444-4444-444444444444',:C1,:UB);
+INSERT INTO conversation_messages (session_id,couple_id,user_id,visibility,role,content) VALUES
+ ('9333e333-3333-3333-3333-333333333333',:C1,:UA,  'private_user','user',
+  'A-THREAD: buying her a necklace for the anniversary'),
+ ('9333e333-3333-3333-3333-333333333333',:C1,NULL,'private_user','assistant',
+  'A-THREAD-REPLY: noted the necklace. That fits the gift budget.'),
+ -- Deliberately mislabelled. Nothing writes a shared message in V0, and if
+ -- anything ever does by mistake, sitting in A's thread must still be enough to
+ -- keep it out of B's reach.
+ ('9333e333-3333-3333-3333-333333333333',:C1,NULL,'shared_couple','assistant',
+  'A-THREAD-REPLY-MISLABELLED: still about the necklace.'),
+ ('9444e444-4444-4444-4444-444444444444',:C1,:UB,  'private_user','user',
+  'B-THREAD: planning a surprise trip'),
+ ('9444e444-4444-4444-4444-444444444444',:C1,NULL,'private_user','assistant',
+  'B-THREAD-REPLY: noted the trip.');
+
 -- ============================================================================
 -- A. READ ISOLATION
 -- ============================================================================
@@ -356,6 +380,74 @@ SELECT t_eq('G3 audit rows agree with the memory they describe',
       WHERE a.entity_type = 'memory'
         AND (a.visibility IS DISTINCT FROM m.visibility
              OR a.owner_user_id IS DISTINCT FROM m.owner_user_id)), 0);
+
+-- ============================================================================
+-- H. A PRIVATE CONVERSATION IS PRIVATE, INCLUDING THE ASSISTANT'S HALF
+--
+-- Added when the private chat surface was built, and the policy it tests was
+-- wrong before a line of that surface existed. It read
+--
+--     ... AND (visibility = 'shared_couple' OR user_id = app_current_user()
+--              OR user_id IS NULL)
+--
+-- with a comment claiming the last branch covered assistant turns "in the
+-- caller's session". Nothing joined conversation_sessions, so it covered
+-- assistant turns in every session in the couple. Reproduced against this
+-- database as app_user: partner B saw neither A's session nor A's own message,
+-- and read the assistant's reply inside A's thread.
+--
+-- ADR 0009 calls this failure class asymmetric and unrecoverable — a leaked
+-- surprise cannot be un-seen — so it gets its own section rather than a line in
+-- section A.
+-- ============================================================================
+BEGIN;
+SET LOCAL ROLE app_user;
+SET LOCAL app.current_couple_id = 'c1111111-1111-1111-1111-111111111111';
+SET LOCAL app.current_user_id   = '11111111-1111-1111-1111-111111111111';
+SELECT t_eq('H1 partner A sees their own thread entire, assistant turns included',
+            (SELECT count(*) FROM conversation_messages), 3);
+SELECT t_eq('H2 partner A sees only their own session',
+            (SELECT count(*) FROM conversation_sessions), 1);
+SELECT t_eq('H3 partner A cannot read the partner thread',
+            (SELECT count(*) FROM conversation_messages WHERE content LIKE 'B-THREAD%'), 0);
+COMMIT;
+
+BEGIN;
+SET LOCAL ROLE app_user;
+SET LOCAL app.current_couple_id = 'c1111111-1111-1111-1111-111111111111';
+SET LOCAL app.current_user_id   = '22222222-2222-2222-2222-222222222222';
+-- The regression itself. Before the fix this returned 2: the two assistant
+-- turns in A's thread, one of which names the necklace.
+SELECT t_eq('H4 partner B cannot read ANY of the partner thread (ADR 0009)',
+            (SELECT count(*) FROM conversation_messages WHERE content LIKE 'A-THREAD%'), 0);
+SELECT t_eq('H5 an authorless assistant turn is not readable by the other partner',
+            (SELECT count(*) FROM conversation_messages WHERE user_id IS NULL), 1);
+SELECT t_eq('H6 a message mislabelled shared_couple is still confined to its thread',
+            (SELECT count(*) FROM conversation_messages WHERE visibility = 'shared_couple'), 0);
+SELECT t_eq('H7 partner B still sees their own thread (no false positive)',
+            (SELECT count(*) FROM conversation_messages), 2);
+COMMIT;
+
+BEGIN;
+SET LOCAL ROLE app_user;
+SET LOCAL app.current_couple_id = 'c2222222-2222-2222-2222-222222222222';
+SET LOCAL app.current_user_id   = '33333333-3333-3333-3333-333333333333';
+SELECT t_eq('H8 a stranger in another couple sees no conversation at all',
+            (SELECT count(*) FROM conversation_messages), 0);
+COMMIT;
+
+BEGIN;
+SET LOCAL ROLE app_user;
+SET LOCAL app.current_couple_id = 'c1111111-1111-1111-1111-111111111111';
+SET LOCAL app.current_user_id   = '22222222-2222-2222-2222-222222222222';
+-- Writing into the partner's thread is the same leak from the other end: a
+-- forged assistant turn there would be read by them as the system's own words.
+SELECT t_blocked('H9 cannot write into the partner thread',
+  $$INSERT INTO conversation_messages (session_id,couple_id,user_id,visibility,role,content)
+    VALUES ('9333e333-3333-3333-3333-333333333333',
+            'c1111111-1111-1111-1111-111111111111',NULL,'private_user','assistant',
+            'FORGED: your partner said it is fine to open the box')$$);
+COMMIT;
 
 -- ----------------------------------------------------------------------------
 \o

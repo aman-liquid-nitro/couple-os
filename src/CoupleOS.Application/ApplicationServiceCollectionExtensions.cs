@@ -1,4 +1,5 @@
 using CoupleOS.Application.Capture;
+using CoupleOS.Application.Conversation;
 using CoupleOS.Application.Identity;
 using CoupleOS.Application.Tools;
 using Microsoft.Extensions.DependencyInjection;
@@ -15,6 +16,12 @@ public static class ApplicationServiceCollectionExtensions
         services.AddScoped<IBlockProcessor, BlockProcessor>();
         services.AddScoped<ICaptureIntake, CaptureIntake>();
         services.AddScoped<ISharedFileEditor, SharedFileEditor>();
+
+        // ADR 0009's other surface. It shares the tool registry and the dispatcher
+        // registered above and nothing else, which is the whole of what "one
+        // pipeline" means here.
+        services.AddScoped<IPrivateThread, PrivateThread>();
+
         services.AddScoped<IMagicLinkService, MagicLinkService>();
 
         // TryAdd, so a host that binds these from configuration wins and a test

@@ -46,3 +46,18 @@ ul.report li { padding: 0.45rem 0; border-bottom: 1px solid var(--line); }
 .htmx-request.htmx-indicator { opacity: 1; }
 
 h2 { font-size: 1rem; margin: 1.4rem 0 0.3rem; text-transform: lowercase; letter-spacing: 0.02em; }
+
+/* M2. The private thread. No chat bubbles: the same bordered list the change
+   report uses, because it is the same kind of thing — a record of turns — and a
+   second visual language for it would be a second thing to keep in step.
+   The two roles are distinguished by the label and the indent, not by colour,
+   so it still reads as a transcript when printed or read by a screen reader. */
+li.turn { display: grid; grid-template-columns: 5rem 1fr; gap: 0.75rem; align-items: baseline; }
+li.turn .who { font-size: 0.8rem; text-transform: lowercase; }
+li.turn .what { white-space: pre-wrap; }
+li.turn.reply .what { color: var(--fg); }
+
+/* What a turn actually recorded, under the reply that claims it. Indented into
+   the text column so it lines up with the words it is qualifying. */
+li.turn ul.changes { grid-column: 2; list-style: none; padding: 0; margin: 0.35rem 0 0;
+                     font-size: 0.9rem; color: var(--muted); }

@@ -11,6 +11,8 @@ public sealed class CoupleOsDbContext(DbContextOptions<CoupleOsDbContext> option
     public DbSet<DumpFile> DumpFiles => Set<DumpFile>();
     public DbSet<DumpRun> DumpRuns => Set<DumpRun>();
     public DbSet<DumpBlock> DumpBlocks => Set<DumpBlock>();
+    public DbSet<ConversationSession> ConversationSessions => Set<ConversationSession>();
+    public DbSet<ConversationMessage> ConversationMessages => Set<ConversationMessage>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -126,6 +128,44 @@ public sealed class CoupleOsDbContext(DbContextOptions<CoupleOsDbContext> option
             e.Property(x => x.ErrorMessage).HasColumnName("error_message");
             e.Property(x => x.Question).HasColumnName("question");
             e.Property(x => x.ProcessedAt).HasColumnName("processed_at");
+        });
+
+        b.Entity<ConversationSession>(e =>
+        {
+            e.ToTable("conversation_sessions");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Id).HasColumnName("id");
+            e.Property(x => x.CoupleId).HasColumnName("couple_id");
+            e.Property(x => x.UserId).HasColumnName("user_id");
+            e.Property(x => x.Title).HasColumnName("title");
+            e.Property(x => x.StartedAt).HasColumnName("started_at");
+            e.Property(x => x.EndedAt).HasColumnName("ended_at");
+        });
+
+        b.Entity<ConversationMessage>(e =>
+        {
+            e.ToTable("conversation_messages");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Id).HasColumnName("id");
+            e.Property(x => x.SessionId).HasColumnName("session_id");
+            e.Property(x => x.CoupleId).HasColumnName("couple_id");
+            e.Property(x => x.UserId).HasColumnName("user_id");
+            e.Property(x => x.Visibility).HasColumnName("visibility");
+            e.Property(x => x.Role).HasColumnName("role");
+            e.Property(x => x.Content).HasColumnName("content");
+            e.Property(x => x.CreatedAt).HasColumnName("created_at");
+
+            // Declared for the insert ordering, not for navigation. EF Core
+            // orders inserts by the relationships in the model rather than by the
+            // database's foreign keys, so a session and its first message saved
+            // together get an arbitrary order and fail the FK about half the time
+            // — the same defect that put couple_members before couples during M1.
+            // No navigation property is needed here, or wanted: a thread is read
+            // as a list of messages, and an include would invite loading the
+            // whole transcript to append one line to it.
+            e.HasOne<ConversationSession>()
+                .WithMany()
+                .HasForeignKey(x => x.SessionId);
         });
 
         // NO global query filter on couple_id or visibility, and that is a

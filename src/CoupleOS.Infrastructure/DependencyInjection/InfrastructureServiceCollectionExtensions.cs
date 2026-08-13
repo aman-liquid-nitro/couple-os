@@ -1,4 +1,5 @@
 using CoupleOS.Application.Capture;
+using CoupleOS.Application.Conversation;
 using CoupleOS.Application.Identity;
 using CoupleOS.Application.Persistence;
 using CoupleOS.Application.Tools;
@@ -36,7 +37,8 @@ public static class InfrastructureServiceCollectionExtensions
                 .MapEnum<Visibility>("visibility")
                 .MapEnum<ActionOutcome>("action_outcome")
                 .MapEnum<DumpFileKind>("dump_file_kind")
-                .MapEnum<DumpBlockStatus>("dump_block_status")));
+                .MapEnum<DumpBlockStatus>("dump_block_status")
+                .MapEnum<MessageRole>("message_role")));
 
         // Identity runs on the same database and the same non-superuser role, but
         // outside the couple scope — see IdentityDbContext for why that has to be
@@ -56,6 +58,8 @@ public static class InfrastructureServiceCollectionExtensions
         services.AddScoped<IDumpFileStore, DumpFileStore>();
         services.AddScoped<IDumpBlockStore, DumpBlockStore>();
         services.AddScoped<IDumpRunStore, DumpRunStore>();
+
+        services.AddScoped<IConversationStore, ConversationStore>();
 
         services.AddScoped<IToolAuditSink, AiActionAuditSink>();
 

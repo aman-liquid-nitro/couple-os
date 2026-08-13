@@ -1,6 +1,6 @@
 # Status
 
-**Updated:** 2026-08-13 · **Milestone:** M2 in progress. M0 and M1 both fully met
+**Updated:** 2026-08-13 · **Milestone:** M2 met. M0 and M1 both fully met
 
 This file records **state**. [IMPLEMENTATION_PLAN.md](./IMPLEMENTATION_PLAN.md)
 records **intent** — what each milestone is for and how it ends. Read the plan
@@ -15,12 +15,12 @@ updated speculatively is worse than none.
 
 | | |
 |---|---|
-| Milestone | M2 (capture surfaces) in progress; M0 and M1 closed |
+| Milestone | M2 (capture surfaces) met; M0 and M1 closed |
 | Commits | 38 |
 | Architecture decisions | 13 |
-| Tests | 181, all shown capable of failing (7 need a local Ollama and fail without one) |
-| Registered tools | 1 of 7 (`create_shopping_item`) |
-| Mapped tables | 11 of 28 (+ `users`, `couples`, `couple_members`, `auth_tokens`, `sessions`) |
+| Tests | 220 plus 42 SQL assertions, all shown capable of failing (7 need a model provider configured and fail without one) |
+| Registered tools | 1 of the 7 writing tools (`create_shopping_item`), plus `request_clarification` |
+| Mapped tables | 13 of 28 (+ `users`, `couples`, `couple_members`, `auth_tokens`, `sessions`) |
 | Eval cases running | 4 of 55 |
 
 Two real people can sign in with no password anywhere in the system, form a
@@ -44,8 +44,21 @@ Quick-add is in: one line, one tap, no version to carry and nothing to read
 back. ADR 0009 calls it not optional because a thought captured in a doorway is
 what V0 is testing, and it must not cost more than that.
 
-**M2's shared surface is done. `needs_input` parking and the private thread are
-not built.**
+A run can now also **ask**. `request_clarification` is the third option the
+model never had: rule 1 forbids inventing a missing value and ADR 0004 forbids
+writing without a tool, so a note with a required value missing had no compliant
+action and the line disappeared. It parks instead — `needs_input`, a question in
+the file under *Needs your input*, and the rest of the run unaffected.
+
+The private thread is in, and building it found a leak that predated it. The
+row-level security policy on `conversation_messages` keyed privacy off who
+authored a message, and the assistant's turns have no author — so a reply that
+restates what one partner just said was readable by the other. Proved against the
+running database before a line of the surface existed, and now scoped by session
+instead: nine assertions in section H of `data/rls-tests.sql`, plus the same
+property through EF Core, both shown to fail when the old policy is put back.
+
+**M2 is met. Both surfaces produce units of input, one tool path underneath.**
 
 ---
 
@@ -90,20 +103,34 @@ class involving leaked password hashes.
 
 | Exit criterion | State |
 |---|---|
-| Both surfaces produce blocks | half — the shared file does; the private thread does not exist |
+| Both surfaces produce blocks | done, with the wording read literally and rejected — see below |
 | A second `Process` on an unchanged file creates nothing | done, and now twice over — the dedup index still holds, and the rewrite means the second run has nothing left to read |
 | A correction line supersedes rather than duplicates | not started — needs `supersede`, which arrives with M3's tools |
 | **The report accounts for every block, including those that produced no tool call** | done — the report is built from blocks, and every block carries a status |
 | **`Process` rewrites the file in place** | done — settled lines archived, failed ones left in the inbox |
 | **Quick-add** | done — one line, appended into the inbox, no version to carry and nothing to read back |
+| **`Needs your input` parks clarifications without blocking other blocks** | done — verified in the browser: one line parked with its question, the other blocks in the run untouched, a second Process re-asked nothing |
+
+**On "both surfaces produce blocks".** The private thread does not produce
+`dump_blocks`, and forcing it to would have been a bug. `dump_blocks_dedup` is
+`UNIQUE (dump_file_id, content_hash)` with one private file per member, so the
+second "ok" in a thread would collide with the first and vanish — repetition is
+noise in a dump file and meaning in a conversation. What ADR 0009 actually
+requires is *"both surfaces produce blocks that run through the same
+validate → authorize → execute → audit path"*, and that path is the tool
+dispatcher, which both surfaces share. "Blocks" there is loose wording for "units
+of input"; `dump_blocks` is the shared file's implementation of one and
+`conversation_messages` is the thread's. `DumpFileKind.Private` already recorded
+the same conclusion from the other end — it is unused because ADR 0009 chose chat.
 
 **Also done, and not on the list:** the file model and its editor, `content_version`
 optimistic concurrency with a stale-version warning, one transaction per block,
 the run's counters and its report persisted to `dump_runs.report`.
 
-**Remaining:** `request_clarification` and the `needs_input` parking it fills
-(the writer for that section exists and nothing fills it yet), and the private
-chat surface.
+**Remaining:** nothing. Both surfaces capture, the report accounts for the input,
+a second run creates nothing, and a question can be asked on either surface — in
+the file on one, in the reply on the other. `supersede` is the one exit criterion
+that moved rather than closed: it needs a tool that arrives with M3.
 
 ---
 
@@ -111,7 +138,9 @@ chat surface.
 
 ### Database
 - `data/schema.sql` is authoritative (ADR 0012). 28 tables, **22** with `FORCE ROW LEVEL SECURITY`; the six exceptions are `users`, `couples`, `couple_members`, `auth_tokens`, `sessions` and `expense_categories`. `RlsCoverageTests` asserts that list in both directions — this file previously said 16, and the schema comment named three of the six.
-- `data/rls-tests.sql` — 33 assertions: read isolation, write path, connection reuse, prepared statements under `force_generic_plan`, privilege escalation.
+- `data/rls-tests.sql` — 42 assertions: read isolation, write path, connection reuse, prepared statements under `force_generic_plan`, privilege escalation, and section H's private conversation.
+- **`conversation_messages` is scoped by session, not by authorship**, and was not. The policy read `... OR user_id = app_current_user() OR user_id IS NULL`, with a comment claiming the last branch covered assistant turns "in the caller's session" — it never joined `conversation_sessions`, so it covered assistant turns in every session in the couple. An assistant turn is authorless by nature and restates what the person just said, so the partner could read a paraphrase of the surprise. Reproduced as `app_user` against the running database *before* the chat surface existed, then closed with an `EXISTS` against the session. The `visibility = 'shared_couple'` branch went with it: a message in one partner's thread is private whatever that column says, and the column's job is to scope the *records the turn produces* (ADR 0009), not the transcript.
+- `conversation_sessions_one_open_per_member` — new, partial on `ended_at`. One thread per partner, so one person with two tabs cannot end up with two histories; a single-user race, which is the kind that reaches production because nobody thinks to test it.
 - `data/rls-concurrency.sh` — 1600 interleaved transactions across 16 reused connections, `-M prepared`.
 - Both verified to fail when a policy is removed.
 
@@ -119,13 +148,20 @@ chat surface.
 - `IScopedUnitOfWork` / `ICoupleTransaction` — every read and write passes through a transaction scoped with `set_config(..., true)`.
 - `ICoupleScopeAccessor` / `ICoupleScopeSetter` — reading and establishing the security context are separately grantable.
 - Tool pipeline — `ITool`, `IToolRegistry`, `IToolDispatcher`, `AuditingToolDispatcher`. Forbidden arguments and undeclared properties are refused by the dispatcher, not by each tool.
+- `RequestClarificationTool` — TOOLS.md 2a, and the only tool that writes no row. It returns `ToolExecution.Asks`, and `BlockProcessor` is what turns that into `status = 'needs_input'` and a filled `question`. Deliberately a *capability in the result* rather than a name the pipeline compares against: a tool is handed a couple, a user and a visibility and not the block it came from, so nothing in the tool layer can reach across and rewrite the pipeline's bookkeeping. Its two arguments compose ADR 0009's `"fragment" — question` here, because the model is the only thing that knows which half of a three-item note is in doubt; `FileRewriter` stopped quoting the block a second time.
+- An open question **outranks** a success in the same block. A line that added detergent and asked who paid for dinner is not finished, and `Processed` is a status the file archives — filing it would take the question out of the inbox, which is the one place either partner would have seen it. The row that was created stays created (debt 31 is the other end of that trade).
+- Asking is a `success` with a null `entity_type` and `entity_id`, so it is audited like everything else and counted like nothing: `CaptureReport.Applied` excludes it, and `dump_runs.entities_created` is that sequence's length. Both columns were already nullable and nothing had ever exercised it.
 - `ICaptureProcessor` — one press of Process: intake, then every pending block, then the run's counters and report. Orchestrates only; it never calls a model.
 - `IBlockProcessor` — one block from text to rows. The model call happens outside any transaction; the dispatches, the block's status and its entity links happen inside one; a block that throws is marked failed in a transaction of its own, because the failure being recorded is usually the failure that rolled the previous one back.
 - `FileRewriter` — the writer half of `BlockSegmenter`, and its mirror: pure, static, and sharing one classifier (`BlockSegmenter.RoleOf`) rather than reimplementing "is this section ours". Settled blocks move into a dated `## Processed` section, parked ones into `## Needs your input`, and **failed ones stay in the inbox** because the inbox is what the file says is outstanding. Everything else — the couple's own headings, their blank lines — is left verbatim; the only reordering is lifting the inbox back above the archive, because an inbox below three months of history is an inbox nobody writes in from a phone. Matched by hash, never by the line numbers recorded when the block was first seen, because the file has been edited since.
 - The rewrite's read and write share one transaction and the write carries the version the read returned, so a partner saving mid-run is refused exactly as they would be in the editor — `PartnerSavedFirst`, reported on the page, retried by the next Process. Rewriting from a stale copy is how a run would silently delete a line somebody had just typed.
 - `QuickAdd` — one line into the inbox, spliced rather than re-rendered, so an append cannot reflow a file somebody is mid-sentence in. Appending at the *end* of the file is the obvious implementation and is wrong: after one run the end of the file is inside the archive, which the segmenter refuses to read, so every quick-added line would be stored, displayed, and never processed. The entry is written as a list item so that a line quick-added and the same words typed into the editor hash to one block rather than two.
 - `ISharedFileEditor` — read and save `shared.md`. The version check is in the `UPDATE`'s `WHERE` clause, so two partners saving the same version produce exactly one winner. A refusal is a result, not an exception: the loser sees the partner's text and may save again on top of it deliberately (ADR 0009's last-write-wins-with-a-warning, both halves).
-- `CapturePrompt` — versioned (`2026-08-12.1`), because the eval set judges this exact text.
+- `IPrivateThread` / `PrivateThread` — ADR 0009's private half, and the mirror of `CaptureProcessor` rather than a variant of it. What the two share is one provider, one registry, one dispatcher and therefore one tool path; what differs is arrival and reporting. The person's turn commits **before** the model is called, so a provider that is down costs a reply and not a message — and an unreachable model produces an assistant turn saying so, in its own transaction, for the same reason `BlockProcessor.FailAsync` needs one.
+- Clarification is in-band here, and reuses the shared surface's tool rather than sitting beside it: a `request_clarification` call becomes the reply, outranking the model's own prose. Verified in the browser that the live model instead asks in prose and calls nothing, which `ChatPrompt` rule 3 asks for — and crucially does not invent an item name.
+- The reply and the record are two fields, never folded together. A model can write "added that to your list" without calling the tool, and the only way a screen can contradict it is by holding both. The fallback for a silent model says how it went — `Recorded`, `Some of that went through`, `None of that went through` — and deliberately does not restate the change list: the first version did, and the browser showed one coffee twice.
+- `CapturePrompt` — versioned (`2026-08-13.1`), because the eval set judges this exact text.
+- `ChatPrompt` — versioned (`2026-08-13.1`) and separate, because the two surfaces disagree about the rule that matters most in the other. CapturePrompt rule 1 forbids prose outright; here prose is the entire medium. No eval case judges it yet, so its version is a promise rather than a measurement. Rule 2 used to end "say nothing about it rather than guessing", which is what a model with no way to ask has to be told; it now names `request_clarification`, and rule 3 says outright that a date the person wrote is never a missing value.
 
 ### Identity (M1)
 - `IdentityDbContext` — the five tables sign-in touches, and no couple-scoped table at all. A second context rather than more DbSets, because authentication runs *before* a couple scope exists and so cannot use `IScopedUnitOfWork`; given that, making it its own context buys an invariant the type system enforces. This is debt 8's seam built the other way round.
@@ -145,7 +181,9 @@ chat surface.
 ### Web
 - Razor Pages + htmx, no Bootstrap or jQuery (ADR 0010). htmx vendored locally, not from a CDN.
 - One page: the `shared.md` editor, Save, Process, and a change report that lists every block under what became of it.
+- The report's buckets used to be the `else` of its stranded-lines warning, so one line that failed on an earlier run hid everything the current run had just done — including a question waiting to be answered. Found while verifying the parking in the browser, on a file that happened to have both. The two facts are independent and are now printed as two.
 - The file's version rides in a hidden field and is swapped back out of band by every response that writes — one partial owns that rule, because a response that changes the row and leaves the input alone makes the user's next press conflict with their own last one.
+- A second page: the private thread. One input, no Process button and no version, and both absences are the design — a conversation has nobody else editing it, so there is no stale copy to detect, and it acts as you speak, so there is nothing to defer. The turn list is appended to with `hx-swap="beforeend"`, so a long thread is not re-rendered and re-posted on every message the way the shared textarea must be (debt 27).
 - Sign in, check-your-email, callback, sign out, create couple, invite partner. Six screens, one input each.
 - `/health` — plain text, unauthenticated, backed by `DatabaseHealthCheck`. Runs `SELECT 1`, so a healthy answer means the app reached Postgres as the non-superuser role. `CanConnectAsync` was the obvious implementation and the wrong one: it swallows the provider exception and returns a bare false, discarding the only part worth reading.
 
@@ -164,9 +202,8 @@ chat surface.
 |---|---|
 | A profile screen — `display_name` is the email's local part and cannot be changed | M2 or later |
 | A session list, so "sign out everywhere" can be aimed rather than all-or-nothing | later |
-| The single-line quick-add box (ADR 0009 calls it not optional) | M2 |
-| The private chat surface | M2 |
-| `needs_input` parking and `request_clarification` implementation | M2 |
+| Answering a parked question, as a loop the system closes rather than the user retyping the line (debt 31) | M3 |
+| Per-intent accounting on the private surface — the unit there is the whole message (debt 32) | M3 |
 | Six of seven tools — task, reminder, expense, event, memory, search | M3 |
 | Eval gates enforced as a build gate | M4 |
 | Attachments and the read surface | M5 |
@@ -190,6 +227,11 @@ citation at the wrong paragraph.
 3. **`/health` is unauthenticated, and must stay that way.** The container probe has no credentials, so `SessionAuthenticationMiddleware` allow-lists it. It returns one word and never the exception text the logs carry; anything richer added there is readable by anyone who can reach the port.
 4. ~~**Data protection keys are not persisted.**~~ **Paid.** A named volume holds the key ring, and the Dockerfile creates the directory owned by uid 1654 so the volume inherits that rather than being created root-owned. Verified the way it used to fail: a page rendered by one container still POSTs after `up -d --build`. It stopped being theoretical when it locked the sign-in form during M2's browser verification — the stale cookie is HttpOnly, so the only ways through were clearing cookies by hand or browsing from a different hostname.
 5. **The invitation email does not name the inviter.** `invitedByDisplayName` is passed as null, so every invitation reads "Your partner has invited you". Wiring it needs the sender's display name, which is currently an email local part anyway — worth doing with the profile screen, not before. *(M2)*
+31. **A parked question can be asked but not answered — not by the system, anyway.** The question reaches the file and the report; closing the loop does not exist, and it has two halves. The file says *"Answer by adding a line below"*, and that line becomes a block of its own with no memory of what it answers: the model is handed `amy paid` alone and has no expense to attach it to, and `dump_blocks.answered_by_block_id` is a column nothing writes. Alternatively the user edits the original line, which rehashes it into a *new* block — so every tool the first pass already ran runs again. That is harmless today by luck rather than design: `create_shopping_item` deduplicates on `normalized_name` and it is the only writing tool registered. The narrow fix is to carry the open questions into the prompt as context for the blocks that follow them, which is a prompt change and therefore an eval-set change (`CapturePrompt.Version`, and the cases in debt 21) — so it belongs with the milestone that registers the tools whose missing values are what gets asked about in the first place. *(M3)*
+
+32. **The private surface accounts for tool calls, not for input — M2's own defect, back on the other surface.** Debt 6 was "the change report describes actions, not input", and blocks paid it: every line gets a status, so silence is unrepresentable. The private thread has no equivalent, because its unit of input is the whole message. Seen on the first real turn: *"i want to get ben a watch for his birthday, and we're out of coffee"* recorded the coffee and said nothing whatsoever about the watch — no tool covers it, and nothing structural forced the reply to admit that. It is milder here than it was there, because `ChatPrompt` rule 1 asks for prose and a well-behaved model does say what it could not do, but *asking* is not the same as making it unrepresentable, which is the standard the shared surface now meets. The fix is to segment a message into intents the way a file is segmented into blocks, and it wants the tools that make multi-intent messages common — six of seven arrive in M3. *(M3)*
+33. **A private thread's history is capped at twenty turns and nothing says so.** `ChatPrompt.HistoryTurns` truncates silently: turn twenty-one is answered by a model that cannot see turn one, and the person gets no indication that the assistant has stopped being able to remember. This is debt 8 with a conversation attached — the tool catalogue and the history both grow, and they multiply rather than add. The honest fix is summarising older turns rather than dropping them, because a thread that forgets without saying so contradicts itself and looks like a bug in the model. Twenty is enough for the sessions V0 is meant to produce, so this becomes real the first time somebody has a long one. *(V1)*
+34. **Nothing ends a thread, so `conversation_sessions.ended_at` is never written.** One open thread per member forever, growing without bound — the same shape as debt 27's archive, and cheaper today only because the history sent to a model is capped (debt 33) and the page renders the same window. A "start a new conversation" button is what writes the column, and `conversation_sessions_one_open_per_member` is partial on `ended_at` specifically so it can be added without a schema change. *(M5)*
 
 **Design questions with a real answer needed later**
 
@@ -236,6 +278,8 @@ citation at the wrong paragraph.
 - `DbContext.Database.CanConnectAsync()` returns false rather than throwing, discarding the reason. Anything that needs to report *why* the database is unreachable has to issue the statement itself.
 - **EF Core orders inserts by the relationships in the model, not by the database's foreign keys.** Two entities inserted in one `SaveChanges` with no declared relationship between them get an arbitrary order — here, `couple_members` before `couples`, failing on the FK every time. Declaring `HasOne<Couple>().WithMany().HasForeignKey(...)` fixes the ordering; no navigation property is needed, or wanted.
 - **Shared knowledge is readable from a private thread, and that is the intended direction.** Scope is asymmetric on purpose: a search from a private thread sees that partner's private rows *plus* the shared ones, and a search from `shared.md` sees only shared ones. Confirmed as correct rather than tolerated — a private conversation that could not consult what the couple jointly knows would be useless as a thinking partner, and it leaks nothing, because the flow is private-reads-shared. The direction that must never open is the reverse, and `share_memory` is the only path across it: user-initiated, `confirm`-tier, warned as irreversible.
+- **A policy that keys privacy off authorship gets the authorless rows wrong, and the authorless rows are the dangerous ones.** `conversation_messages` allowed `user_id IS NULL` so that the assistant's turns would be readable; nobody noticed that this made them readable by *everyone in the couple*, because the branch had a comment explaining what it was meant to do. The unit of privacy for a conversation is the conversation, not the sentence — and a comment asserting a join that is not in the SQL is worse than no comment. Found by reading the policy while planning a feature that would have shipped on top of it.
+- **The right time to read a policy is before writing the code that depends on it.** This one had been in `data/schema.sql` since the first commit and passed every existing test, because nothing wrote a row it governed. A table with no rows has no leaks; the coverage test that counts which tables have RLS could not tell the difference.
 - Making registration and sign-in one code path removes enumeration as a *category* rather than mitigating it. There is no "address not found" branch to have different timing, so nothing has to be padded or constant-timed.
 - `Secure` cookies work over `http://localhost` — browsers treat localhost as a secure context — so the attribute needs no environment switch, and therefore cannot be misconfigured in one.
 - `SameSite=Strict` would break magic links. The cookie is set on a response to a top-level navigation from a mail client; under Strict it is withheld on the redirect that follows, and a valid link lands back on the sign-in page.

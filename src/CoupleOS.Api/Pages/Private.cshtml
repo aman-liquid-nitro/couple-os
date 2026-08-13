@@ -1,0 +1,41 @@
+@page
+@model PrivateModel
+@using CoupleOS.Domain.Enums
+@{ ViewData["Title"] = "Private"; }
+
+<h1>your private thread</h1>
+<p class="muted">
+    Only you can see this — not your partner, not on their screen and not in the
+    shared file. Anything recorded from here is yours alone.
+</p>
+
+@*
+    The list is appended to rather than replaced. hx-swap="beforeend" on the
+    container plus hx-target pointing at it means one turn's worth of markup comes
+    back per send, so a long thread is not re-rendered and re-sent on every
+    message — the shared page's textarea has that cost and cannot avoid it
+    (STATUS debt 27); this one can, so it does.
+*@
+<ul class="report" id="thread">
+    @foreach (var message in Model.History)
+    {
+        <li class="turn @(message.Role == MessageRole.User ? "said" : "reply")">
+            <span class="who muted">@(message.Role == MessageRole.User ? "you" : "assistant")</span>
+            <span class="what">@message.Content</span>
+        </li>
+    }
+</ul>
+
+@*
+    hx-on::after-request clears the box only when the request succeeded, so a
+    failed send leaves what the person typed where they can send it again. Its own
+    form, and the only one on the page, so Enter sends.
+*@
+<form method="post" hx-post="/Private?handler=Say" hx-target="#thread"
+      hx-swap="beforeend" hx-disabled-elt="#send"
+      hx-on::after-request="if (event.detail.successful) this.reset()">
+    <input type="text" name="Said" id="Said" autocomplete="off"
+           placeholder="what are you thinking about?" />
+    <button type="submit" id="send">Send</button>
+    <span class="muted htmx-indicator">thinking…</span>
+</form>
