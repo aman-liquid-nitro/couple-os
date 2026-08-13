@@ -18,6 +18,11 @@ public sealed class CoupleOsDbContext(DbContextOptions<CoupleOsDbContext> option
     /// <summary>The calendar. One entity, named CalendarEvent because `event` is a keyword.</summary>
     public DbSet<CalendarEvent> Events => Set<CalendarEvent>();
 
+    public DbSet<Expense> Expenses => Set<Expense>();
+
+    /// <summary>Read-only. Twelve system rows are seeded; nothing in V0 writes them.</summary>
+    public DbSet<ExpenseCategory> ExpenseCategories => Set<ExpenseCategory>();
+
     public DbSet<AiAction> AiActions => Set<AiAction>();
     public DbSet<DumpFile> DumpFiles => Set<DumpFile>();
     public DbSet<DumpRun> DumpRuns => Set<DumpRun>();
@@ -93,6 +98,41 @@ public sealed class CoupleOsDbContext(DbContextOptions<CoupleOsDbContext> option
             e.Property(x => x.Location).HasColumnName("location");
             e.Property(x => x.RecurrenceRule).HasColumnName("recurrence_rule");
             e.Property(x => x.Category).HasColumnName("category");
+        });
+
+        b.Entity<Expense>(e =>
+        {
+            e.ToTable("expenses");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Id).HasColumnName("id");
+            e.Property(x => x.CoupleId).HasColumnName("couple_id");
+            e.Property(x => x.OwnerUserId).HasColumnName("owner_user_id");
+            e.Property(x => x.Visibility).HasColumnName("visibility");
+
+            // Stated rather than inferred. EF would map decimal to numeric with the
+            // provider's default precision, and SPEC.md 56.7 wants the arithmetic to
+            // be the database's numeric(14,2) and nothing else.
+            e.Property(x => x.Amount).HasColumnName("amount").HasColumnType("numeric(14,2)");
+
+            e.Property(x => x.Currency).HasColumnName("currency");
+            e.Property(x => x.CategoryId).HasColumnName("category_id");
+            e.Property(x => x.Description).HasColumnName("description");
+            e.Property(x => x.Merchant).HasColumnName("merchant");
+            e.Property(x => x.PaidBy).HasColumnName("paid_by");
+            e.Property(x => x.IsShared).HasColumnName("is_shared");
+
+            // A date, not a timestamp. Writing a timestamptz here would be silently
+            // truncated by PostgreSQL and the truncation would use UTC.
+            e.Property(x => x.OccurredOn).HasColumnName("occurred_on").HasColumnType("date");
+        });
+
+        b.Entity<ExpenseCategory>(e =>
+        {
+            e.ToTable("expense_categories");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Id).HasColumnName("id");
+            e.Property(x => x.CoupleId).HasColumnName("couple_id");
+            e.Property(x => x.Name).HasColumnName("name");
         });
 
         b.Entity<AiAction>(e =>

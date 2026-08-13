@@ -25,6 +25,21 @@ public sealed class NullEventWriter : IEventWriter
         Task.CompletedTask;
 }
 
+public sealed class NullExpenseWriter : IExpenseWriter
+{
+    public Task AddAsync(Expense expense, CancellationToken cancellationToken = default) => Task.CompletedTask;
+}
+
+/// <summary>
+/// Every category name resolves, because what the eval set measures is whether the
+/// model picked a sensible one — not whether this database was seeded.
+/// </summary>
+public sealed class StubCategoryLookup : IExpenseCategoryLookup
+{
+    public Task<Guid?> FindAsync(Guid coupleId, string name, CancellationToken cancellationToken = default) =>
+        Task.FromResult<Guid?>(Guid.CreateVersion7());
+}
+
 /// <summary>
 /// A couple of two, so a commitment resolves. The identity of the partner is not
 /// what any eval case measures — that it exists is, because a one-member couple

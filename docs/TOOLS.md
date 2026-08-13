@@ -232,6 +232,32 @@ Tier `none` · idempotent · SPEC.md §14
 
 **Notes.** SPEC.md §14 is explicit — *if the payer is ambiguous, ask*. `paid_by: "unknown"` is therefore a valid model output that triggers a follow-up question rather than a default to the speaker. A gift expense should be `private_user`, and the model is instructed to treat gift-shaped purchases as private by default (SPEC.md §19).
 
+> **Built, with one clause deliberately unimplemented.** `paid_by: "unknown"` does
+> **not** trigger a follow-up question yet. Asking is `request_clarification`, and
+> an open question outranks a success in the same block — so the block parks, and
+> STATUS debt 31 means answering it by editing the line re-hashes it into a new
+> block that re-runs every tool the first pass ran. Today that would turn one
+> expense into two. So the row is written with a null `paid_by` and the change
+> report says *who paid is not recorded, because the note did not say*: the amount
+> is the part that is hard to reconstruct a week later, and nothing is attributed
+> to somebody who may not have paid. When debt 31 is paid, this becomes the
+> question §14 asks for.
+>
+> Three more things the schema above does not say. `category` is a **closed set of
+> the twelve names `data/schema.sql` seeds**, not free text — free text produces a
+> different spelling of "Dining" every week and a column that cannot be grouped by
+> — and a name that matches nothing resolves to null and is reported as
+> uncategorised rather than creating a category the couple never chose.
+> `occurred_on` is always written from the couple's clock, never left to
+> `CURRENT_DATE`, which is the database host's today and therefore yesterday for a
+> couple spending money at 3am in Asia/Kolkata. And a third decimal place is
+> rounded to two with the rounding stated, because money altered on the way in is
+> money the person did not write.
+>
+> `currency` is not expected of the model: it defaults to the couple's INR and a
+> named one is upper-cased. The eval set asserts the stored row for this rather
+> than the word, since requiring the code would measure vocabulary.
+
 ---
 
 ### 5. `create_event`

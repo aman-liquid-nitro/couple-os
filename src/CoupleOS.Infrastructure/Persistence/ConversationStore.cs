@@ -84,17 +84,28 @@ public sealed class ConversationStore(
     {
         ArgumentNullException.ThrowIfNull(message);
 
-        // created_at left to the column default, so two turns written in the same
-        // request are ordered by the database rather than by whether this process's
-        // clock ticked between them. Id is a v7 uuid, which breaks the tie the
-        // default's shared now() creates within one transaction.
+        // created_at comes from the database's clock and not this process's, but
+        // from clock_timestamp() rather than the column's now() default — and the
+        // difference is the whole ordering of a thread. now() is the *transaction's*
+        // start time, identical for every row written inside one, so two turns in one
+        // request tie and the tie-break falls to the id.
+        //
+        // The id cannot carry it. A v7 uuid is time-ordered only to the millisecond
+        // and random below that, so rows created in the same millisecond sort
+        // arbitrarily — which is exactly how the history test failed intermittently,
+        // returning three of five messages in an order nothing guaranteed. A
+        // conversation whose order is decided by a random tail is not a
+        // conversation.
+        //
+        // clock_timestamp() is still the database's opinion of the time and is
+        // monotonic within a transaction, which is the property the ORDER BY needs.
         await _dbContext.Database.ExecuteSqlAsync(
             $"""
              INSERT INTO conversation_messages
-                 (id, session_id, couple_id, user_id, visibility, role, content)
+                 (id, session_id, couple_id, user_id, visibility, role, content, created_at)
              VALUES
                  ({message.Id}, {message.SessionId}, {message.CoupleId}, {message.UserId},
-                  {message.Visibility}, {message.Role}, {message.Content})
+                  {message.Visibility}, {message.Role}, {message.Content}, clock_timestamp())
              """,
             cancellationToken);
     }

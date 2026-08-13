@@ -25,6 +25,7 @@ public static class ToolServiceCollectionExtensions
         // The tool whose absence produced M2's founding defect: the dinner line in
         // the first real run had nothing to call, so it vanished from the report.
         services.AddScoped<ITool, CreateEventTool>();
+        services.AddScoped<ITool, CreateExpenseTool>();
 
         // Registered alongside the writing tools rather than treated as part of
         // the pipeline, because to the model it is one of the options and that is

@@ -43,6 +43,8 @@ public sealed class ToolCatalogueTests
         services.AddScoped<IShoppingItemWriter>(_ => new NoOpShoppingItemWriter());
         services.AddScoped<ITaskWriter>(_ => new RecordingTaskWriter());
         services.AddScoped<IEventWriter>(_ => new NoOpEventWriter());
+        services.AddScoped<IExpenseWriter>(_ => new NoOpExpenseWriter());
+        services.AddScoped<IExpenseCategoryLookup>(_ => new NoOpCategoryLookup());
         services.AddScoped<CoupleOS.Application.Time.ICoupleClock>(_ => new FixedCoupleClock());
         services.AddScoped<IPartnerLookup>(_ => new StubPartnerLookup(Guid.NewGuid()));
 
@@ -109,6 +111,19 @@ public sealed class ToolCatalogueTests
         schema.ValueKind == JsonValueKind.Object && schema.TryGetProperty("properties", out var properties)
             ? [.. properties.EnumerateObject().Select(p => p.Name)]
             : [];
+
+    private sealed class NoOpExpenseWriter : IExpenseWriter
+    {
+        public Task AddAsync(
+            CoupleOS.Domain.Entities.Expense expense,
+            CancellationToken cancellationToken = default) => Task.CompletedTask;
+    }
+
+    private sealed class NoOpCategoryLookup : IExpenseCategoryLookup
+    {
+        public Task<Guid?> FindAsync(Guid coupleId, string name, CancellationToken cancellationToken = default) =>
+            Task.FromResult<Guid?>(null);
+    }
 
     private sealed class NoOpEventWriter : IEventWriter
     {

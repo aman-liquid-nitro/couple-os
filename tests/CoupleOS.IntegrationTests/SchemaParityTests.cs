@@ -40,6 +40,11 @@ public sealed class SchemaParityTests : IClassFixture<RlsFixture>
             // moment somebody first writes down a dinner.
             "events",
 
+            // expenses.amount is NOT NULL with a CHECK rather than a default, and
+            // occurred_on is a date this application always writes rather than
+            // letting CURRENT_DATE decide — the server's today is not the couple's.
+            "expenses",
+
             // M1 identity. All five are inserted into during sign-in and
             // invitation, so every NOT NULL column without a default must be
             // mapped — the failure otherwise is a constraint violation at the
@@ -67,7 +72,15 @@ public sealed class SchemaParityTests : IClassFixture<RlsFixture>
     /// entity carries them.
     /// </summary>
     private static readonly HashSet<string> ReadOnlyTables =
-        new(StringComparer.Ordinal) { "memories" };
+        new(StringComparer.Ordinal)
+        {
+            "memories",
+
+            // Twelve system categories are seeded by data/schema.sql and V0 has no
+            // screen that adds one, so create_expense resolves a name to an id and
+            // never inserts. Declared rather than left to be noticed.
+            "expense_categories",
+        };
 
     private static ServiceProvider BuildProvider() =>
         new ServiceCollection()
