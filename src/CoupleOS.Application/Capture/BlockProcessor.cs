@@ -155,7 +155,8 @@ public sealed class BlockProcessor(
                 result.EntityType,
                 result.EntityId,
                 Describe(result, call),
-                result.Asked));
+                result.Asked,
+                result.Found));
 
             if (result.Succeeded && result is { EntityType: { } type, EntityId: { } id })
             {
@@ -290,6 +291,16 @@ public sealed class BlockProcessor(
             return result.Question!;
         }
 
+        if (result.Found)
+        {
+            // What was found, and not "search memory: italian food". The line the
+            // person needs is the answer; naming the tool in front of it would put
+            // a mechanism where the content goes. This surface has no other place
+            // to put it — STATUS debt 30 is that a file cannot really be asked, and
+            // the report line is the honest half of that.
+            return result.Answer!;
+        }
+
         if (result.Succeeded)
         {
             // The note rides along on the same line rather than in a section of
@@ -297,8 +308,8 @@ public sealed class BlockProcessor(
             // "friday" landed on, what hour was filled in — and a person reading
             // "create reminder: call the plumber" needs it there or not at all.
             return result.Note is { Length: > 0 } note
-                ? $"{Humanise(result.ToolName)}: {Summarise(call)} — {note}"
-                : $"{Humanise(result.ToolName)}: {Summarise(call)}";
+                ? $"{Humanise(result.ToolName)}: {ToolSummary.Of(call)} — {note}"
+                : $"{Humanise(result.ToolName)}: {ToolSummary.Of(call)}";
         }
 
         var reason = result.Errors is { Count: > 0 }
@@ -309,22 +320,6 @@ public sealed class BlockProcessor(
     }
 
     private static string Humanise(string toolName) => toolName.Replace('_', ' ');
-
-    private static string Summarise(LlmToolCall call)
-    {
-        // The first string argument is nearly always the human-meaningful one:
-        // an item's name, a task's title, an event's title.
-        foreach (var property in call.Arguments.EnumerateObject())
-        {
-            if (property.Value.ValueKind == System.Text.Json.JsonValueKind.String &&
-                property.Value.GetString() is { Length: > 0 } value)
-            {
-                return value;
-            }
-        }
-
-        return call.Arguments.GetRawText();
-    }
 
     /// <summary>
     /// error_message is text and takes anything, but a model's raw output can be

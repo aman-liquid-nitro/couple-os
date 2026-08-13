@@ -27,6 +27,12 @@ public static class ToolServiceCollectionExtensions
         services.AddScoped<ITool, CreateEventTool>();
         services.AddScoped<ITool, CreateExpenseTool>();
 
+        // The last two, and the two that are not about doing anything: what the
+        // couple knows, and asking it. search_memory is the only read-only tool in
+        // the set and the only one whose result is a sentence rather than a row.
+        services.AddScoped<ITool, CreateMemoryTool>();
+        services.AddScoped<ITool, SearchMemoryTool>();
+
         // Registered alongside the writing tools rather than treated as part of
         // the pipeline, because to the model it is one of the options and that is
         // exactly the point: declining has to be as reachable as acting, or the

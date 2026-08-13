@@ -190,6 +190,7 @@ public sealed class PrivateThread(
 
         var changes = new List<CaptureChange>();
         var questions = new List<string>();
+        var answers = new List<string>();
 
         await using var transaction = await _unitOfWork.BeginAsync(cancellationToken);
 
@@ -223,15 +224,26 @@ public sealed class PrivateThread(
                 result.EntityType,
                 result.EntityId,
                 Describe(result, call),
-                result.Asked));
+                result.Asked,
+                result.Found));
 
             if (result.Asked)
             {
                 questions.Add(result.Question!);
             }
+
+            if (result.Found)
+            {
+                answers.Add(result.Answer!);
+            }
         }
 
-        var reply = Message(scope, session, MessageRole.Assistant, Compose(completion, changes, questions), authored: false);
+        var reply = Message(
+            scope,
+            session,
+            MessageRole.Assistant,
+            Compose(completion, changes, questions, answers),
+            authored: false);
 
         await _conversations.AppendAsync(reply, cancellationToken);
 
@@ -287,15 +299,28 @@ public sealed class PrivateThread(
     /// change list beside every reply, so a fallback built out of the same strings
     /// showed the person "create shopping item: coffee" twice and looked like two
     /// coffees. The reply says how it went; the list says what it was.
+    ///
+    /// A search result also outranks the model's prose, and for a harder reason
+    /// than a question does. There is no second completion in V0, so the prose was
+    /// written before the search ran: whatever it says about what the couple
+    /// remembers, it is saying from invention. The rendered finding is the only
+    /// sentence on this path with rows behind it, so it is the one that gets shown.
+    /// A conversation would narrate it instead — STATUS debt 41.
     /// </summary>
     private static string Compose(
         LlmCompletion completion,
         IReadOnlyList<CaptureChange> changes,
-        IReadOnlyList<string> questions)
+        IReadOnlyList<string> questions,
+        IReadOnlyList<string> answers)
     {
         if (questions.Count > 0)
         {
             return string.Join(" ", questions);
+        }
+
+        if (answers.Count > 0)
+        {
+            return string.Join("\n\n", answers);
         }
 
         if (!string.IsNullOrWhiteSpace(completion.Content))
@@ -375,9 +400,16 @@ public sealed class PrivateThread(
             return result.Question!;
         }
 
+        if (result.Found)
+        {
+            return result.Answer!;
+        }
+
         if (result.Succeeded)
         {
-            return $"{Humanise(result.ToolName)}: {Summarise(call)}";
+            return result.Note is { Length: > 0 } note
+                ? $"{Humanise(result.ToolName)}: {ToolSummary.Of(call)} — {note}"
+                : $"{Humanise(result.ToolName)}: {ToolSummary.Of(call)}";
         }
 
         var reason = result.Errors is { Count: > 0 }
@@ -388,18 +420,4 @@ public sealed class PrivateThread(
     }
 
     private static string Humanise(string toolName) => toolName.Replace('_', ' ');
-
-    private static string Summarise(LlmToolCall call)
-    {
-        foreach (var property in call.Arguments.EnumerateObject())
-        {
-            if (property.Value.ValueKind == System.Text.Json.JsonValueKind.String &&
-                property.Value.GetString() is { Length: > 0 } value)
-            {
-                return value;
-            }
-        }
-
-        return call.Arguments.GetRawText();
-    }
 }

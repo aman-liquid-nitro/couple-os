@@ -39,6 +39,12 @@ public sealed class DateExpressionResolverTests
     [InlineData("yesterday", "2026-08-11 09:00")]
     [InlineData("next week", "2026-08-19 09:00")]
     [InlineData("next month", "2026-09-12 09:00")]
+
+    // Backwards, for search_memory's since_expression. Every other caller asks
+    // about the future; this is the one that asks what has been recorded already.
+    [InlineData("last week", "2026-08-05 09:00")]
+    [InlineData("past month", "2026-07-12 09:00")]
+    [InlineData("last year", "2025-08-12 09:00")]
     public void The_words_people_actually_use_resolve(string expression, string expected)
     {
         var resolved = Resolve(expression);

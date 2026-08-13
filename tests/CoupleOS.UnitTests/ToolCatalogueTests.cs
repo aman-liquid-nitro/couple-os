@@ -47,6 +47,8 @@ public sealed class ToolCatalogueTests
         services.AddScoped<IExpenseCategoryLookup>(_ => new NoOpCategoryLookup());
         services.AddScoped<CoupleOS.Application.Time.ICoupleClock>(_ => new FixedCoupleClock());
         services.AddScoped<IPartnerLookup>(_ => new StubPartnerLookup(Guid.NewGuid()));
+        services.AddScoped<IMemoryWriter>(_ => new NoOpMemoryWriter());
+        services.AddScoped<IMemorySearch>(_ => new NoOpMemorySearch());
 
         services.AddCoupleOsTools();
 
@@ -111,6 +113,29 @@ public sealed class ToolCatalogueTests
         schema.ValueKind == JsonValueKind.Object && schema.TryGetProperty("properties", out var properties)
             ? [.. properties.EnumerateObject().Select(p => p.Name)]
             : [];
+
+    private sealed class NoOpMemoryWriter : IMemoryWriter
+    {
+        public Task<IReadOnlyList<CoupleOS.Domain.Entities.Memory>> FindBySubjectAsync(
+            Guid coupleId,
+            CoupleOS.Domain.Enums.MemoryType type,
+            string subjectKey,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult<IReadOnlyList<CoupleOS.Domain.Entities.Memory>>([]);
+
+        public Task AddAsync(
+            CoupleOS.Domain.Entities.Memory memory,
+            IReadOnlyList<CoupleOS.Domain.Entities.Memory> superseded,
+            CancellationToken cancellationToken = default) => Task.CompletedTask;
+    }
+
+    private sealed class NoOpMemorySearch : IMemorySearch
+    {
+        public Task<IReadOnlyList<CoupleOS.Domain.Entities.Memory>> SearchAsync(
+            MemoryQuery query,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult<IReadOnlyList<CoupleOS.Domain.Entities.Memory>>([]);
+    }
 
     private sealed class NoOpExpenseWriter : IExpenseWriter
     {

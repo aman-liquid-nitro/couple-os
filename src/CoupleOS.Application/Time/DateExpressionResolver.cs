@@ -222,6 +222,21 @@ public static class DateExpressionResolver
             case "next year":
                 assumption = "one year from today";
                 return today.AddYears(1);
+
+            // The backward halves, for search_memory's since_expression — the one
+            // argument in the codebase that asks about the past. "since june"
+            // already resolved backwards; these are the phrasings a person is more
+            // likely to use, and their absence made an offered argument fail every
+            // time it was used, which is worse than not offering it.
+            case "last week" or "past week":
+                assumption = "one week ago";
+                return today.AddDays(-7);
+            case "last month" or "past month":
+                assumption = "one month ago";
+                return today.AddMonths(-1);
+            case "last year" or "past year":
+                assumption = "one year ago";
+                return today.AddYears(-1);
         }
 
         // "in three days", "for two weeks", "in a month". "for" reads as a

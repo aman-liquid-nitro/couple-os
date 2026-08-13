@@ -47,7 +47,16 @@ public static class InfrastructureServiceCollectionExtensions
                 // default and there is no CLR enum to keep in step. It arrives with
                 // the read surface that filters on it.
                 .MapEnum<TaskItemKind>("task_kind")
-                .MapEnum<PriorityLevel>("priority_level")));
+                .MapEnum<PriorityLevel>("priority_level")
+
+                // M3's memory tools. data_source is shared by five tables and
+                // mapped here for the one that writes it deliberately (see the
+                // enum's own note); memory_status is mapped because superseding
+                // writes it, not because anything filters on it yet.
+                .MapEnum<MemoryType>("memory_type")
+                .MapEnum<MemoryAssertion>("memory_assertion")
+                .MapEnum<MemoryStatus>("memory_status")
+                .MapEnum<DataSource>("data_source")));
 
         // Identity runs on the same database and the same non-superuser role, but
         // outside the couple scope — see IdentityDbContext for why that has to be
@@ -67,6 +76,12 @@ public static class InfrastructureServiceCollectionExtensions
         services.AddScoped<IEventWriter, EventWriter>();
         services.AddScoped<IExpenseWriter, ExpenseWriter>();
         services.AddScoped<IExpenseCategoryLookup, ExpenseCategoryLookup>();
+        services.AddScoped<IMemoryWriter, MemoryWriter>();
+
+        // On the couple-scoped context, like every other read that runs inside a
+        // tool call. It is raw SQL, which makes that placement the whole of its
+        // security: no set_config, no rows.
+        services.AddScoped<IMemorySearch, MemorySearch>();
 
         // On IdentityDbContext, because couple_members has no row-level security.
         // Same seam as the clock below, and the same reason.

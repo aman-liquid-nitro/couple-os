@@ -11,13 +11,24 @@ namespace CoupleOS.Application.Capture;
 /// about: without it a clarification would be listed under "added" and counted
 /// in <c>dump_runs.entities_created</c>.
 /// </param>
+/// <param name="IsAnswer">
+/// True when this call looked rather than wrote, and its
+/// <paramref name="Description"/> is therefore what was found.
+///
+/// Read by the private thread's turn, which leaves it out of the change list for
+/// the same reason it leaves a question out: on that surface the answer <i>is</i>
+/// the reply, and printing it beside itself reads as two searches. Verified in the
+/// browser, where it did — the same defect the reply's own fallback was fixed for.
+/// The shared surface keeps it, because the report line is the only place it has.
+/// </param>
 public sealed record CaptureChange(
     string ToolName,
     ToolOutcome Outcome,
     string? EntityType,
     Guid? EntityId,
     string Description,
-    bool IsQuestion = false);
+    bool IsQuestion = false,
+    bool IsAnswer = false);
 
 /// <summary>
 /// What became of one block, and the record that makes silence impossible.
@@ -132,13 +143,18 @@ public sealed record CaptureReport(
     /// <summary>
     /// Applied changes across every block, for the "added" section.
     ///
-    /// A question is excluded even though it succeeded. It is the only successful
-    /// call in the system that creates nothing, and counting it here would report
-    /// an entity created for a run whose whole output was a question —
-    /// <c>dump_runs.entities_created</c> is this sequence's length.
+    /// Filtered on the entity rather than on what kind of call it was, because
+    /// there are now three successful calls that create nothing and enumerating
+    /// them here would mean remembering to add the fourth: a question
+    /// (<c>request_clarification</c>), an answer (<c>search_memory</c>) and a
+    /// repetition (<c>create_memory</c> on a memory the couple already holds). What
+    /// they have in common is the only thing this property cares about —
+    /// <c>dump_runs.entities_created</c> is this sequence's length, so a change with
+    /// no entity behind it must not be in it.
     /// </summary>
     public IEnumerable<CaptureChange> Applied =>
-        Blocks.SelectMany(b => b.Changes).Where(c => c.Outcome == ToolOutcome.Success && !c.IsQuestion);
+        Blocks.SelectMany(b => b.Changes)
+            .Where(c => c.Outcome == ToolOutcome.Success && c.EntityId is not null);
 
     public IEnumerable<CaptureChange> Refused =>
         Blocks.SelectMany(b => b.Changes).Where(c => c.Outcome != ToolOutcome.Success);

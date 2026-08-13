@@ -49,6 +49,14 @@ public sealed class SchemaParityTests : IClassFixture<RlsFixture>
             // invitation, so every NOT NULL column without a default must be
             // mapped — the failure otherwise is a constraint violation at the
             // moment someone tries to sign in for the first time.
+            // M3's memory tools. type is the column that kept this table read-only
+            // for three milestones: NOT NULL with no default, so an unmapped one
+            // failed every insert. Four more of its columns have defaults the entity
+            // states rather than inherits — assertion, status, source and confidence
+            // — and two of those the CLR would get wrong by omission rather than
+            // right, which is why the entity makes them required.
+            "memories",
+
             "users", "couples", "couple_members", "auth_tokens", "sessions",
 
             // M2 capture. dump_files and dump_blocks are inserted through raw
@@ -66,16 +74,14 @@ public sealed class SchemaParityTests : IClassFixture<RlsFixture>
         };
 
     /// <summary>
-    /// Read-only for now, so unmapped required columns are tolerated. This is
-    /// recorded debt, not an oversight: memories.type and memories.content are
-    /// NOT NULL with no default, and create_memory (M3) cannot ship until the
-    /// entity carries them.
+    /// Read-only, so unmapped required columns are tolerated. Declared rather than
+    /// left to be noticed — <c>memories</c> sat here until M3 wrote it, and the
+    /// entry was what told the person writing <c>create_memory</c> which column was
+    /// missing, instead of the database saying so in production.
     /// </summary>
     private static readonly HashSet<string> ReadOnlyTables =
         new(StringComparer.Ordinal)
         {
-            "memories",
-
             // Twelve system categories are seeded by data/schema.sql and V0 has no
             // screen that adds one, so create_expense resolves a name to an id and
             // never inserts. Declared rather than left to be noticed.
@@ -209,9 +215,9 @@ public sealed class SchemaParityTests : IClassFixture<RlsFixture>
     [Fact]
     public async Task Read_only_tables_are_declared_rather_than_forgotten()
     {
-        // memories is mapped for reading only. Recording that here means the
-        // day someone writes create_memory, this test tells them what is
-        // missing instead of the database doing it in production.
+        // expense_categories is mapped for reading only, and saying so here is what
+        // keeps this check honest: a table that is neither declared writable nor
+        // declared read-only is a table nothing checks the required columns of.
         await using var provider = BuildProvider();
 
         var mappedTables = AllMappedEntityTypes(provider)

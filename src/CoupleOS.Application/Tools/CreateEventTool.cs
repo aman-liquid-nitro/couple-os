@@ -55,7 +55,16 @@ public sealed class CreateEventTool(IEventWriter writer, ICoupleClock clock) : I
 
     public string Description =>
         "Record something happening at a time: a dinner, a birthday, an appointment, a trip. " +
-        "Call once per event. Use create_reminder instead when the point is being told beforehand.";
+        "Call once per event. Use create_reminder instead when the point is being told beforehand. " +
+
+        // Added when create_memory made the alternative reachable: "let's visit my
+        // parents next month" came back as an event on a day nobody named, which is
+        // the invented date the whole date contract exists to prevent — one month
+        // out, stated as an assumption, and still not a day anybody agreed to. The
+        // resolver cannot catch this: "next month" resolves perfectly well. Only the
+        // choice of tool can, so the choice is described here.
+        "Only when the person named the day. Something they intend with no day yet — 'next month', " +
+        "'sometime in the summer' — is a plan; record it with create_memory instead of picking a date.";
 
     public JsonElement ParametersSchema => Schema;
 

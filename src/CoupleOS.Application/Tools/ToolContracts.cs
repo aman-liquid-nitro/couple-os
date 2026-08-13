@@ -97,19 +97,50 @@ public sealed record ToolValidation(bool IsValid, IReadOnlyList<string> Errors)
 /// allowed and completing it silently is not, and a note that stops at the tool
 /// boundary is silent as far as the couple is concerned.
 /// </param>
+/// <param name="Answer">
+/// What a read-only tool found, already phrased for a person.
+///
+/// The third thing a successful call can be, after a row and a question, and the
+/// channel <c>search_memory</c> could not ship without: a search's whole output is
+/// what it found, so returning it as a <paramref name="Note"/> would file the
+/// answer as a footnote to a change that did not happen.
+///
+/// Phrased in the tool rather than handed back as rows, deliberately. There is no
+/// second model call in V0 — one completion, then execution — so a model's prose
+/// is written *before* any search runs, and letting it narrate results it never saw
+/// is how a system states a memory the couple does not have. So the answer is
+/// rendered where the rows are, and it outranks the model's own words on the
+/// surface that shows a reply.
+/// </param>
 public sealed record ToolExecution(
     ToolOutcome Outcome,
     string? EntityType = null,
     Guid? EntityId = null,
     string? Error = null,
     string? Question = null,
-    string? Note = null)
+    string? Note = null,
+    string? Answer = null)
 {
     public static ToolExecution Created(string entityType, Guid entityId, string? note = null) =>
         new(ToolOutcome.Success, entityType, entityId, Note: note);
 
     public static ToolExecution Failed(string error) =>
         new(ToolOutcome.ExecutionFailed, Error: error);
+
+    /// <summary>
+    /// The call was right and there was nothing to write.
+    ///
+    /// Today: a memory the couple already holds, word for word, on the same
+    /// subject (SPEC.md §44). A failure would be wrong — nothing went wrong — and
+    /// <see cref="Created"/> would be worse, because it would report a row and
+    /// count an entity for a statement that changed nothing.
+    /// </summary>
+    public static ToolExecution Unchanged(string note) =>
+        new(ToolOutcome.Success, Note: note);
+
+    /// <summary>Succeeded at looking, and wrote nothing.</summary>
+    public static ToolExecution Found(string answer) =>
+        new(ToolOutcome.Success, Answer: answer);
 
     /// <summary>
     /// Succeeded at asking, and wrote nothing.
@@ -131,7 +162,8 @@ public sealed record ToolResult(
     Guid? EntityId = null,
     IReadOnlyList<string>? Errors = null,
     string? Question = null,
-    string? Note = null)
+    string? Note = null,
+    string? Answer = null)
 {
     public bool Succeeded => Outcome == ToolOutcome.Success;
 
@@ -141,4 +173,11 @@ public sealed record ToolResult(
     /// things that were added.
     /// </summary>
     public bool Asked => Question is { Length: > 0 };
+
+    /// <summary>
+    /// True when this call looked rather than wrote. Read by the private thread,
+    /// where an answer takes precedence over the model's own prose — the prose was
+    /// composed before the search ran.
+    /// </summary>
+    public bool Found => Answer is { Length: > 0 };
 }

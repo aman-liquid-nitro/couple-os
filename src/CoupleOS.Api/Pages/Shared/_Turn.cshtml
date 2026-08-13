@@ -27,10 +27,13 @@
         calling the tool is the failure SPEC.md 46 forbids, and the only way this
         screen can contradict it is by showing both. A question is left out — it
         IS the reply on this surface (ADR 0009's in-band clarification), and
-        printing it twice would read as the assistant asking twice.
+        printing it twice would read as the assistant asking twice. A search
+        result is left out for the same reason and on the same evidence: it is
+        rendered from rows rather than written by the model, so it becomes the
+        reply, and the browser showed one memory listed under itself.
     *@
     @{
-        var recorded = Model.Changes.Where(c => !c.IsQuestion).ToList();
+        var recorded = Model.Changes.Where(c => !c.IsQuestion && !c.IsAnswer).ToList();
     }
 
     @if (recorded.Count > 0)

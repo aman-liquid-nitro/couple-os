@@ -41,6 +41,42 @@ public sealed class CoupleOsDbContext(DbContextOptions<CoupleOsDbContext> option
             e.Property(x => x.OwnerUserId).HasColumnName("owner_user_id");
             e.Property(x => x.Content).HasColumnName("content");
             e.Property(x => x.Visibility).HasColumnName("visibility");
+            e.Property(x => x.Type).HasColumnName("type");
+            e.Property(x => x.Assertion).HasColumnName("assertion");
+            e.Property(x => x.Source).HasColumnName("source");
+            e.Property(x => x.SubjectKey).HasColumnName("subject_key");
+            e.Property(x => x.ExpiresAt).HasColumnName("expires_at");
+            e.Property(x => x.Status).HasColumnName("status");
+            e.Property(x => x.SupersededById).HasColumnName("superseded_by_id");
+
+            // Stated, for the reason expenses.amount is: numeric(3,2) is a
+            // two-decimal fraction of one, and EF's default decimal mapping is
+            // not that. A confidence silently rounded is ADR 0006's cap made
+            // meaningless.
+            e.Property(x => x.Confidence).HasColumnName("confidence").HasColumnType("numeric(3,2)");
+
+            // Read, never written. The column's default is now(), and mapping it
+            // without this would have EF insert the CLR's DateTimeOffset.MinValue
+            // — year 1, which sorts first forever and would put every new memory
+            // at the bottom of a recency ranking.
+            e.Property(x => x.CreatedAt).HasColumnName("created_at").ValueGeneratedOnAdd();
+
+            // Declared for the insert ordering, not for navigation — the same
+            // reason conversation_messages declares one, and the third time this
+            // codebase has been bitten by it. EF Core orders writes by the
+            // relationships in the model rather than by the database's foreign
+            // keys, so a supersession saved in one SaveChanges put the UPDATE that
+            // points at the new memory *before* the INSERT that creates it, and
+            // memories_superseded_by_id_fkey refused every correction. A
+            // self-reference with no navigation property is the whole fix.
+            e.HasOne<Memory>()
+                .WithMany()
+                .HasForeignKey(x => x.SupersededById);
+
+            // importance keeps its database default and is deliberately unmapped;
+            // embedding, source_message_id, confirmed_at and
+            // visibility_changed_at wait on flows V0 does not have. search_tsv is
+            // GENERATED ALWAYS and mapping it would make every insert fail.
         });
 
         b.Entity<ShoppingItem>(e =>

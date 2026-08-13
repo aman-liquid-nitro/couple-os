@@ -1,6 +1,7 @@
 using CoupleOS.Application.Time;
 using CoupleOS.Application.Tools;
 using CoupleOS.Domain.Entities;
+using CoupleOS.Domain.Enums;
 
 namespace CoupleOS.AITests.Evals;
 
@@ -28,6 +29,40 @@ public sealed class NullEventWriter : IEventWriter
 public sealed class NullExpenseWriter : IExpenseWriter
 {
     public Task AddAsync(Expense expense, CancellationToken cancellationToken = default) => Task.CompletedTask;
+}
+
+/// <summary>
+/// Nothing exists yet, so nothing supersedes and nothing is a duplicate. Both
+/// branches are decided in C# and tested there; what the eval set measures is
+/// whether the model chose a type, an assertion and a subject key that make sense
+/// for the sentence.
+/// </summary>
+public sealed class NullMemoryWriter : IMemoryWriter
+{
+    public Task<IReadOnlyList<Memory>> FindBySubjectAsync(
+        Guid coupleId,
+        MemoryType type,
+        string subjectKey,
+        CancellationToken cancellationToken = default) =>
+        Task.FromResult<IReadOnlyList<Memory>>([]);
+
+    public Task AddAsync(
+        Memory memory,
+        IReadOnlyList<Memory> superseded,
+        CancellationToken cancellationToken = default) => Task.CompletedTask;
+}
+
+/// <summary>
+/// Finds nothing, which is the right answer for a harness with no corpus — and the
+/// safe one: a stub returning invented memories would let a case pass on a search
+/// result no database produced.
+/// </summary>
+public sealed class EmptyMemorySearch : IMemorySearch
+{
+    public Task<IReadOnlyList<Memory>> SearchAsync(
+        MemoryQuery query,
+        CancellationToken cancellationToken = default) =>
+        Task.FromResult<IReadOnlyList<Memory>>([]);
 }
 
 /// <summary>
