@@ -42,6 +42,30 @@ public sealed record BlockReport(
 }
 
 /// <summary>
+/// What the run did to the file itself, after doing everything else.
+/// </summary>
+public enum FileRewriteOutcome
+{
+    /// <summary>
+    /// Nothing settled, or everything that settled belongs to text the file no
+    /// longer contains. The file was not written, deliberately: a version bump
+    /// for no change makes both partners' open editors stale for nothing.
+    /// </summary>
+    NothingToMove,
+
+    /// <summary>Blocks moved into the archive, and the file is a version newer.</summary>
+    Rewritten,
+
+    /// <summary>
+    /// The other partner saved between this run reading the file and writing it
+    /// back, so the rewrite was refused rather than applied over their text. The
+    /// work itself is done and recorded — only the tidying was skipped, and the
+    /// next Process will do it.
+    /// </summary>
+    PartnerSavedFirst,
+}
+
+/// <summary>
 /// What a run cost, summed over its blocks.
 ///
 /// One call per block means N completions, so this is a sum rather than a single
@@ -82,6 +106,19 @@ public sealed record CaptureReport(
 {
     public static CaptureReport Empty { get; } = new([], 0, 0, null);
 
+    /// <summary>
+    /// What became of the file. Init-only rather than positional because it is
+    /// decided after the blocks are — the rewrite is the last thing a run does,
+    /// and it needs their statuses to know what to move.
+    /// </summary>
+    public FileRewriteOutcome Rewrite { get; init; }
+
+    /// <summary>
+    /// Lines still in the file that an earlier run failed on and that no run will
+    /// try again. Reported so that "nothing new" cannot be read as "nothing left".
+    /// </summary>
+    public int Stranded { get; init; }
+
     public IEnumerable<BlockReport> With(DumpBlockStatus status) =>
         Blocks.Where(b => b.Status == status);
 
@@ -95,5 +132,14 @@ public sealed record CaptureReport(
     /// <summary>True when this run had nothing to do, which is not the same as doing nothing.</summary>
     public bool NothingToDo => Blocks.Count == 0;
 
-    public bool FileIsEmpty => BlocksSeen == 0;
+    /// <summary>
+    /// No readable blocks at all.
+    ///
+    /// Named for the inbox rather than the file, because since the rewrite these
+    /// are different things: a couple three months in has a file full of archive
+    /// and, most of the time, nothing left in front of it. "The file is empty"
+    /// was true when the only way to reach zero was an empty file, and became a
+    /// lie the day a run started clearing the inbox behind itself.
+    /// </summary>
+    public bool NothingToRead => BlocksSeen == 0;
 }

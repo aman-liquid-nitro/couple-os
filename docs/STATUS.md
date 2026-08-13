@@ -16,9 +16,9 @@ updated speculatively is worse than none.
 | | |
 |---|---|
 | Milestone | M2 (capture surfaces) in progress; M0 and M1 closed |
-| Commits | 35 |
+| Commits | 37 |
 | Architecture decisions | 13 |
-| Tests | 141, all shown capable of failing (7 need a local Ollama and fail without one) |
+| Tests | 163, all shown capable of failing (7 need a local Ollama and fail without one) |
 | Registered tools | 1 of 7 (`create_shopping_item`) |
 | Mapped tables | 11 of 28 (+ `users`, `couples`, `couple_members`, `auth_tokens`, `sessions`) |
 | Eval cases running | 4 of 55 |
@@ -34,8 +34,14 @@ The change report is built from the input rather than from the actions, which
 was the point of the milestone: a line no tool covers now appears in the report
 saying so, where it used to disappear without trace.
 
-**M2's shared surface is most of the way there. The file rewrite, the quick-add
-box, `needs_input` parking and the private thread are not built.**
+Process now also **rewrites the file**. Settled lines move into a dated
+`## Processed` section struck through with what they became, failed ones stay in
+the inbox, and the inbox is what is left to do. That makes the file itself the
+durable record — before it, closing the tab left the change report as a JSON
+column nothing renders.
+
+**M2's shared surface is most of the way there. The quick-add box,
+`needs_input` parking and the private thread are not built.**
 
 ---
 
@@ -81,18 +87,18 @@ class involving leaked password hashes.
 | Exit criterion | State |
 |---|---|
 | Both surfaces produce blocks | half — the shared file does; the private thread does not exist |
-| A second `Process` on an unchanged file creates nothing | done — asserted through the run, not through the index: one item, not two |
+| A second `Process` on an unchanged file creates nothing | done, and now twice over — the dedup index still holds, and the rewrite means the second run has nothing left to read |
 | A correction line supersedes rather than duplicates | not started — needs `supersede`, which arrives with M3's tools |
 | **The report accounts for every block, including those that produced no tool call** | done — the report is built from blocks, and every block carries a status |
+| **`Process` rewrites the file in place** | done — settled lines archived, failed ones left in the inbox |
 
 **Also done, and not on the list:** the file model and its editor, `content_version`
 optimistic concurrency with a stale-version warning, one transaction per block,
 the run's counters and its report persisted to `dump_runs.report`.
 
-**Remaining:** the file rewrite in place (Inbox / Needs your input / Processed —
-`BlockSegmenter` already refuses to re-read those sections, so the reader half is
-built and the writer half is not), the quick-add box, `request_clarification` and
-the `needs_input` parking it fills, and the private chat surface.
+**Remaining:** the quick-add box, `request_clarification` and the `needs_input`
+parking it fills (the writer for that section exists and nothing fills it yet),
+and the private chat surface.
 
 ---
 
@@ -110,6 +116,8 @@ the `needs_input` parking it fills, and the private chat surface.
 - Tool pipeline — `ITool`, `IToolRegistry`, `IToolDispatcher`, `AuditingToolDispatcher`. Forbidden arguments and undeclared properties are refused by the dispatcher, not by each tool.
 - `ICaptureProcessor` — one press of Process: intake, then every pending block, then the run's counters and report. Orchestrates only; it never calls a model.
 - `IBlockProcessor` — one block from text to rows. The model call happens outside any transaction; the dispatches, the block's status and its entity links happen inside one; a block that throws is marked failed in a transaction of its own, because the failure being recorded is usually the failure that rolled the previous one back.
+- `FileRewriter` — the writer half of `BlockSegmenter`, and its mirror: pure, static, and sharing one classifier (`BlockSegmenter.RoleOf`) rather than reimplementing "is this section ours". Settled blocks move into a dated `## Processed` section, parked ones into `## Needs your input`, and **failed ones stay in the inbox** because the inbox is what the file says is outstanding. Everything else — the couple's own headings, their blank lines — is left verbatim; the only reordering is lifting the inbox back above the archive, because an inbox below three months of history is an inbox nobody writes in from a phone. Matched by hash, never by the line numbers recorded when the block was first seen, because the file has been edited since.
+- The rewrite's read and write share one transaction and the write carries the version the read returned, so a partner saving mid-run is refused exactly as they would be in the editor — `PartnerSavedFirst`, reported on the page, retried by the next Process. Rewriting from a stale copy is how a run would silently delete a line somebody had just typed.
 - `ISharedFileEditor` — read and save `shared.md`. The version check is in the `UPDATE`'s `WHERE` clause, so two partners saving the same version produce exactly one winner. A refusal is a result, not an exception: the loser sees the partner's text and may save again on top of it deliberately (ADR 0009's last-write-wins-with-a-warning, both halves).
 - `CapturePrompt` — versioned (`2026-08-12.1`), because the eval set judges this exact text.
 
@@ -150,7 +158,6 @@ the `needs_input` parking it fills, and the private chat surface.
 |---|---|
 | A profile screen — `display_name` is the email's local part and cannot be changed | M2 or later |
 | A session list, so "sign out everywhere" can be aimed rather than all-or-nothing | later |
-| The file rewrite in place — Inbox / Needs your input / Processed sections | M2 |
 | The single-line quick-add box (ADR 0009 calls it not optional) | M2 |
 | The private chat surface | M2 |
 | `needs_input` parking and `request_clarification` implementation | M2 |
@@ -196,9 +203,11 @@ they are visible in one place rather than discoverable only by reading commits.
 21. **The eval set still encodes the pre-fix date contract.** Eight cases in `data/eval-cases.jsonl` expect resolved timestamps — `"due_at": "2026-08-12"`, `"starts_at": "2026-12-14"` — which is now the behaviour TOOLS.md forbids. They are inert because those tools are unregistered and `EvalCoverage` reports them blocked, so M3 unblocks tests that assert the wrong thing. Two problems, not one: the contract is wrong *and* a hard-coded absolute date rots as "today" moves. Not rewritten here — expectations are a measurement decision, and they belong with the milestone that registers the tools and can watch them pass. *(M3)*
 22. **Date resolution has nowhere to live.** TOOLS.md now declares expression fields on all eight date arguments, and the resolver they imply does not exist. It needs the couple's timezone, which `ToolExecutionContext` does not carry — `couples.timezone` and `users.timezone` are in the schema and unread. Owed before the first date-bearing tool ships. *(M3)*
 23. **No CI.** Deliberately deferred. "CI gate" currently means a command someone remembers to run.
-24. **A failed or ignored block is never retried.** `PendingAsync` reads `unprocessed`, so a block that failed because Ollama was unreachable stays failed, and pressing Process again does nothing for it. Deliberate — a blanket retry would re-run every ignored heading — but the user has no way to say "try that one again", and the only workaround is to retype the line so it hashes differently. *(M2 or M3)*
+24. **A failed block is never retried, and now the report at least says so.** `PendingAsync` reads `unprocessed`, so a block that failed because Ollama was unreachable stays failed and pressing Process again does nothing for it. The rewrite made this visible rather than merely true: it files the successes out of the inbox, so what is left in front of a couple who are up to date is *precisely* the failures — and the report used to greet that with "all 1 block in the file were processed by an earlier run", which is success language over a failed action and exactly what SPEC.md 46 forbids. `CaptureReport.Stranded` now counts the failed blocks the file still contains, intersected against what the file currently says so a line the user deleted stops being warned about, and the report names them and says to edit and re-press. **The retry itself is still owed.** The narrow version is the right one: re-run `failed` alone, not `ignored`, which is why the blanket retry was rejected here in the first place. *(M3)*
 25. **A run's cost is now per block, and it shows.** Eleven blocks took 26.9s against `gemma4:31b` at ~2.4s each, with the full tool catalogue in every prompt. This is debt 8 arriving as a measurement rather than a projection: the levers in ADR 0011 — filter tools per block, or batch blocks per call — are the same, and the second one trades away the per-block status this milestone was built for. *(M3)*
-26. **Two test classes share a serialized collection because they share one row.** `shared.md` is one row per couple, so `SharedFileEditorTests` and `CaptureIntakeTests` cannot run in parallel against the fixture couple. Correct and cheap today; the honest fix is a couple per test class, and it is not worth building until the suite is slow enough to care.
+26. **Process saves unconditionally, so a run that does nothing still bumps the version.** The save has to come first — processing text the file does not contain would report on something nobody could go back and read — but it writes even when the text is byte-for-byte identical, and `SaveSharedAsync` increments on every accepted write. Two presses that changed nothing took the file 5 → 6 → 7 during verification. Harmless to the person pressing it and not to the other one: their open editor goes stale, and their next Save warns them about a partner who wrote nothing. The fix is a no-op check in the `UPDATE`'s `WHERE` clause, not in C#, for the same reason the version check lives there.
+27. **The archive grows without bound.** ADR 0009 names rollover as a consequence and nothing implements it: every run appends a dated section and none are ever pruned or rolled into a separate file. It costs nothing today — the segmenter refuses to read those sections, so the archive never reaches a prompt — but it is loaded, rendered into a textarea, and posted back on every Save, so the cost lands on the phone rather than on the model. *(M5)*
+28. **Two test classes share a serialized collection because they share one row.** `shared.md` is one row per couple, so `SharedFileEditorTests` and `CaptureIntakeTests` cannot run in parallel against the fixture couple. Correct and cheap today; the honest fix is a couple per test class, and it is not worth building until the suite is slow enough to care.
 
 ---
 
@@ -217,4 +226,6 @@ they are visible in one place rather than discoverable only by reading commits.
 - `Secure` cookies work over `http://localhost` — browsers treat localhost as a secure context — so the attribute needs no environment switch, and therefore cannot be misconfigured in one.
 - `SameSite=Strict` would break magic links. The cookie is set on a response to a top-level navigation from a mail client; under Strict it is withheld on the redirect that follows, and a valid link lands back on the sign-in page.
 - **Docker seeds a new named volume from the image directory it covers, ownership included — but only if that directory exists in the image.** Mount a volume over a path the image does not have and Docker creates it root-owned, so a container running as a non-root user cannot write to its own volume. The fix is a `mkdir` and a `chown` at build time, not a runtime workaround.
+- **A file the system writes is a file the system reads back, and the loop has to be closed by a test rather than by care.** The rewrite's output is the next run's input. A rewrite producing anything the segmenter reads as input would put the whole archive through a model call on every press of Process, and the dedup index would hide it perfectly — no duplicate rows, just a run that got slower every day. The assertion that matters is not "the output looks right" but `Segment(Rewrite(x))` containing only what is genuinely unfinished.
+- Reader and writer of the same format need one classifier, not two agreeing ones. `BlockSegmenter.RoleOf` is public for that reason alone: a second implementation of "is this heading one of ours" is a second chance to disagree, and disagreement here is the failure above.
 - A count derived by subtraction lies as soon as the two quantities stop measuring the same set. `AlreadyRecorded` was blocks-seen minus blocks-handled, which went negative the first time a run picked up a block the file no longer contained — and a negative count rendered as nothing at all, so the report looked correct. Found by reading the running page, not by a test.

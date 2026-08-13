@@ -100,6 +100,12 @@ public sealed class CaptureRunTests : IClassFixture<RlsFixture>
         return await request.ServiceProvider.GetRequiredService<ICaptureProcessor>().ProcessAsync();
     }
 
+    private static async Task<SharedFileView> ReadFileAsync(ServiceProvider provider)
+    {
+        await using var request = BeginRequest(provider, RlsFixture.Couple1, RlsFixture.PartnerA);
+        return await request.ServiceProvider.GetRequiredService<ISharedFileEditor>().ReadAsync();
+    }
+
     [Fact]
     public async Task Every_block_is_accounted_for_including_the_one_that_produced_no_tool_call()
     {
@@ -156,12 +162,14 @@ public sealed class CaptureRunTests : IClassFixture<RlsFixture>
 
         var second = await ProcessAsync(services);
 
-        // Nothing to do, and the numbers say why: the block is still there, it
-        // has already been handled. "Saw 0" would be an empty file, which is a
-        // different sentence to the user.
+        // Nothing to do, and now for two reasons rather than one: the block is
+        // recorded, *and* the first run moved its line out of the inbox, so the
+        // second run has nothing to read at all. Before the rewrite this said
+        // "saw 1, already recorded 1" — the dedup index carrying the guarantee on
+        // its own. It still does, underneath; the file no longer makes it work.
         Assert.Empty(second.Blocks);
-        Assert.Equal(1, second.BlocksSeen);
-        Assert.Equal(1, second.AlreadyRecorded);
+        Assert.Equal(0, second.BlocksSeen);
+        Assert.True(second.NothingToRead);
         Assert.True(second.NothingToDo);
 
         // The model was asked once in total, not twice.
@@ -361,8 +369,158 @@ public sealed class CaptureRunTests : IClassFixture<RlsFixture>
 
         var report = await ProcessAsync(services);
 
-        Assert.True(report.FileIsEmpty);
+        Assert.True(report.NothingToRead);
         Assert.Equal(0, report.BlocksSeen);
         Assert.Empty(provider.Prompts);
+
+        // And nothing was written back. A run with nothing to move must not bump
+        // the version, or every open editor goes stale for a file that did not
+        // change and both partners get a conflict warning about nobody.
+        Assert.Equal(FileRewriteOutcome.NothingToMove, report.Rewrite);
+    }
+
+    [Fact]
+    public async Task The_run_files_what_it_settled_and_leaves_the_rest_in_the_inbox()
+    {
+        var run = Nonce();
+
+        var provider = new ScriptedProvider(text =>
+            text.Contains("detergent", StringComparison.Ordinal) ? Creates($"detergent {run}")
+            : text.Contains("breathe", StringComparison.Ordinal) ? SaysNothing("A note to self.")
+
+            // An empty name: the tool layer refuses it, so this block fails.
+            : new LlmCompletion(
+                [new LlmToolCall(
+                    "create_shopping_item",
+                    JsonDocument.Parse("""{"name":""}""").RootElement.Clone())],
+                Content: null,
+                Usage: Usage()));
+
+        await using var services = BuildProvider(provider);
+
+        await WriteFileAsync(services, $"""
+            ## Inbox
+            - we're out of detergent {run}
+            - remember to breathe {run}
+            - the one that fails {run}
+            """);
+
+        var report = await ProcessAsync(services);
+
+        Assert.Equal(FileRewriteOutcome.Rewritten, report.Rewrite);
+
+        var file = await ReadFileAsync(services);
+
+        // Settled, so filed — and the ignored one carries its own words so that
+        // moving it cannot be mistaken for having acted on it.
+        Assert.Contains($"~~we're out of detergent {run}~~", file.Content, StringComparison.Ordinal);
+        Assert.Contains($"~~remember to breathe {run}~~ → read, nothing to do", file.Content, StringComparison.Ordinal);
+
+        // Not settled, so still outstanding, and still where the user will see it.
+        // Nothing retries a failed block (STATUS debt 24), so the line staying put
+        // is the only way back to it.
+        Assert.Contains($"- the one that fails {run}", file.Content, StringComparison.Ordinal);
+        Assert.Contains("## Inbox", file.Content, StringComparison.Ordinal);
+
+        // The user's heading survived, and the archive went below it.
+        Assert.True(
+            file.Content.IndexOf("## Inbox", StringComparison.Ordinal)
+                < file.Content.IndexOf("## Processed", StringComparison.Ordinal),
+            "The inbox has to stay above the archive, or it scrolls off a phone.");
+
+        // And the file the run wrote is a file the next run reads correctly: only
+        // the failed line is still input.
+        var remaining = BlockSegmenter.Segment(file.Content).Select(b => b.RawText).ToList();
+        Assert.Equal([$"- the one that fails {run}"], remaining);
+    }
+
+    [Fact]
+    public async Task A_line_that_failed_earlier_is_never_called_processed()
+    {
+        var run = Nonce();
+
+        // Refused by the tool layer, so the block fails and its line stays in the
+        // inbox — which after the rewrite means the inbox is nothing but that line.
+        var provider = new ScriptedProvider(_ => new LlmCompletion(
+            [new LlmToolCall(
+                "create_shopping_item",
+                JsonDocument.Parse("""{"name":""}""").RootElement.Clone())],
+            Content: null,
+            Usage: Usage()));
+
+        await using var services = BuildProvider(provider);
+
+        await WriteFileAsync(services, $"- the one that fails {run}");
+
+        var first = await ProcessAsync(services);
+        Assert.Single(first.With(DumpBlockStatus.Failed));
+
+        // Nothing was settled, so nothing moved and the version did not budge.
+        Assert.Equal(FileRewriteOutcome.NothingToMove, first.Rewrite);
+
+        var second = await ProcessAsync(services);
+
+        // PendingAsync reads unprocessed rows only, so the failure is invisible to
+        // it and this run has nothing to do. What it must not do is call the line
+        // processed: it is still sitting in the file, and it was not.
+        Assert.True(second.NothingToDo);
+        Assert.Equal(1, second.BlocksSeen);
+        Assert.Equal(1, second.Stranded);
+
+        // Asked once in total. The second run reaches no model, which is why the
+        // user gets no new information unless the report volunteers it.
+        Assert.Single(provider.Prompts);
+    }
+
+    [Fact]
+    public async Task A_failed_line_edited_out_of_the_file_stops_being_counted()
+    {
+        var run = Nonce();
+
+        var provider = new ScriptedProvider(text => text.Contains("fails", StringComparison.Ordinal)
+            ? new LlmCompletion(
+                [new LlmToolCall(
+                    "create_shopping_item",
+                    JsonDocument.Parse("""{"name":""}""").RootElement.Clone())],
+                Content: null,
+                Usage: Usage())
+            : Creates($"quinoa {run}"));
+
+        await using var services = BuildProvider(provider);
+
+        await WriteFileAsync(services, $"- the one that fails {run}");
+        Assert.Single((await ProcessAsync(services)).With(DumpBlockStatus.Failed));
+
+        // The user gives up on that line and deletes it. Its block stays in the
+        // table forever (ADR 0009), so a count taken from the table alone would go
+        // on warning about a line nobody can find and nobody can edit.
+        await WriteFileAsync(services, $"- quinoa {run}");
+
+        var report = await ProcessAsync(services);
+
+        Assert.Equal(0, report.Stranded);
+        Assert.Single(report.With(DumpBlockStatus.Processed));
+    }
+
+    [Fact]
+    public async Task A_rewrite_bumps_the_version_the_editor_has_to_carry()
+    {
+        var run = Nonce();
+
+        var provider = new ScriptedProvider(_ => Creates($"olives {run}"));
+        await using var services = BuildProvider(provider);
+
+        await WriteFileAsync(services, $"- olives {run}");
+
+        var before = await ReadFileAsync(services);
+        await ProcessAsync(services);
+        var after = await ReadFileAsync(services);
+
+        // The page has to be told, which is why the Process response swaps both
+        // the textarea and the version out of band. A page left holding `before`
+        // would, on its next Save, write the pre-run inbox back over the archive
+        // and un-file everything the run just filed.
+        Assert.Equal(before.Version + 1, after.Version);
+        Assert.NotEqual(before.Content, after.Content);
     }
 }

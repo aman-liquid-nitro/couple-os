@@ -5,14 +5,19 @@ using Microsoft.AspNetCore.Mvc.RazorPages;
 namespace CoupleOS.Api.Pages;
 
 /// <summary>
-/// What one press of Process produced, and the file's version afterwards.
+/// What one press of Process produced, and the file it left behind.
 ///
-/// Both, because the version input on the page has to move even when the
-/// interesting half of the answer is the change report. A response that renders
-/// the report and leaves the version behind makes the next press conflict with
-/// this one's own write.
+/// All three, because the run writes the file twice: once with the user's own
+/// text, and again with the settled blocks moved into the archive. A response
+/// that rendered only the report would leave the page holding the text from
+/// before the rewrite, at a version that no longer exists — so the next Save
+/// would either be refused, or replace the archive with the pre-run inbox.
 /// </summary>
-public sealed record ProcessResult(SharedFileSave Save, CaptureReport? Report);
+/// <param name="File">
+/// The file as it stands after the run, which is not <c>Save.File</c> whenever
+/// the rewrite moved anything.
+/// </param>
+public sealed record ProcessResult(SharedFileSave Save, CaptureReport? Report, SharedFileView File);
 
 public sealed class IndexModel(
     ISharedFileEditor sharedFile,
@@ -69,7 +74,7 @@ public sealed class IndexModel(
             // Nothing was written, so there is nothing new to process. Running
             // the model over the partner's text instead would attribute their
             // words to this person and report changes they did not ask for.
-            return Partial("_ProcessResult", new ProcessResult(save, Report: null));
+            return Partial("_ProcessResult", new ProcessResult(save, Report: null, save.File));
         }
 
         // No text and no surface passed: the run reads the file it just wrote,
@@ -77,6 +82,13 @@ public sealed class IndexModel(
         // than from this page's opinion of it (ADR 0009).
         var report = await _captureProcessor.ProcessAsync(cancellationToken);
 
-        return Partial("_ProcessResult", new ProcessResult(save, report));
+        // Re-read rather than reconstruct. The rewrite is the run's own decision
+        // about what the file should now say, and a second implementation of it
+        // here would be a second thing to keep in step.
+        var file = report.Rewrite == FileRewriteOutcome.Rewritten
+            ? await _sharedFile.ReadAsync(cancellationToken)
+            : save.File;
+
+        return Partial("_ProcessResult", new ProcessResult(save, report, file));
     }
 }

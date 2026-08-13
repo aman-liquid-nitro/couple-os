@@ -1,7 +1,23 @@
 @using CoupleOS.Api.Pages
+@using CoupleOS.Application.Capture
 @model ProcessResult
 
-@await Html.PartialAsync("_Version", Model.Save.File.Version)
+@await Html.PartialAsync("_Version", Model.File.Version)
+
+@if (Model.Report?.Rewrite == FileRewriteOutcome.Rewritten)
+{
+    @*
+        The run moved settled blocks into the archive, so the box is holding text
+        the database no longer has. Swapping it is the only safe option, not the
+        convenient one: leave it and the user's next Save writes the pre-run inbox
+        back over the archive, un-filing everything this run just filed.
+
+        The cost is a race — anything typed into the box during the run is lost
+        here. Small, because Process disables its own buttons while it runs and
+        takes seconds, and much smaller than silently undoing the rewrite.
+    *@
+    <textarea name="Text" id="Text" hx-swap-oob="true">@Model.File.Content</textarea>
+}
 
 @*
     The line beside the Save button describes the file, not the run, so a Process
@@ -12,7 +28,7 @@
 <div id="save-state" class="muted" hx-swap-oob="true">
     @if (Model.Save.Accepted)
     {
-        <span>saved · version @Model.Save.File.Version</span>
+        <span>saved · version @Model.File.Version</span>
     }
 </div>
 
@@ -22,5 +38,19 @@
 }
 else if (Model.Report is { } report)
 {
+    @if (report.Rewrite == FileRewriteOutcome.PartnerSavedFirst)
+    {
+        @*
+            Said plainly, and said as tidying rather than as loss, because that is
+            what it is: every block below is recorded. Only the moving of their
+            lines out of the inbox was skipped, and the next Process does it.
+        *@
+        <p class="warning">
+            Your partner saved while this was running, so the file was left as they
+            wrote it. Everything below still happened — the lines will move to
+            Processed the next time you press Process.
+        </p>
+    }
+
     @await Html.PartialAsync("_ChangeReport", report)
 }

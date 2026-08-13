@@ -77,7 +77,19 @@ public sealed class CaptureProcessor(
             // negative, and a negative count of already-processed blocks was
             // rendered as nothing at all rather than as the nonsense it was.
             intake.AlreadyRecorded,
-            Summarise(reports));
+            Summarise(reports))
+        {
+            // Last, and after every block has committed. A block is settled the
+            // moment its own transaction commits; moving its line in the file is
+            // bookkeeping on top of that, and bookkeeping that failed must not be
+            // able to unsettle the work it was describing.
+            Rewrite = await RewriteAsync(pending, reports, cancellationToken),
+
+            // Carried straight through from intake, which is the only place that
+            // knows both what the file currently says and what the table already
+            // knew about it.
+            Stranded = intake.Stranded,
+        };
 
         await FinishAsync(intake, report, cancellationToken);
 
@@ -91,6 +103,96 @@ public sealed class CaptureProcessor(
         await transaction.CommitAsync(cancellationToken);
 
         return pending;
+    }
+
+    /// <summary>
+    /// Moves this run's settled blocks out of the inbox and into the sections
+    /// that record them — ADR 0009's "rewrite the file in place".
+    ///
+    /// The read and the write share one transaction and the write carries the
+    /// version the read returned, so a partner saving in between is refused here
+    /// exactly as it would be in the editor. Refused, and not retried: their text
+    /// is newer than the copy this run read, and rewriting from a stale copy is
+    /// how a run would silently delete a line somebody had just typed.
+    /// </summary>
+    private async Task<FileRewriteOutcome> RewriteAsync(
+        IReadOnlyList<DumpBlock> pending,
+        IReadOnlyList<BlockReport> reports,
+        CancellationToken cancellationToken)
+    {
+        var outcomes = Outcomes(pending, reports);
+
+        if (outcomes.Count == 0)
+        {
+            return FileRewriteOutcome.NothingToMove;
+        }
+
+        await using var transaction = await _unitOfWork.BeginAsync(cancellationToken);
+
+        var file = await _files.GetOrCreateSharedAsync(cancellationToken);
+
+        // UTC, and the couple's own date only by coincidence. The heading is a
+        // label on an archive rather than an input to anything, so the cheap
+        // version is worth shipping — and STATUS debt 22 owes a resolver that
+        // knows couples.timezone before anything date-bearing is written.
+        var today = DateOnly.FromDateTime(_clock.GetUtcNow().UtcDateTime);
+        var rewritten = FileRewriter.Rewrite(file.Content, outcomes, today);
+
+        if (string.Equals(rewritten, file.Content, StringComparison.Ordinal))
+        {
+            await transaction.CommitAsync(cancellationToken);
+
+            return FileRewriteOutcome.NothingToMove;
+        }
+
+        var save = await _files.SaveSharedAsync(rewritten, file.ContentVersion, cancellationToken);
+
+        await transaction.CommitAsync(cancellationToken);
+
+        return save.Accepted ? FileRewriteOutcome.Rewritten : FileRewriteOutcome.PartnerSavedFirst;
+    }
+
+    /// <summary>
+    /// Pairs each block with what the run decided about it.
+    ///
+    /// Joined on the block id rather than on position, because a report and a
+    /// pending list that drift apart by one would archive every line under the
+    /// wrong outcome — and the file is the thing the user reads afterwards to
+    /// find out what happened.
+    /// </summary>
+    private static IReadOnlyList<BlockOutcome> Outcomes(
+        IReadOnlyList<DumpBlock> pending,
+        IReadOnlyList<BlockReport> reports)
+    {
+        var byId = pending.ToDictionary(b => b.Id);
+
+        return
+        [
+            .. reports
+                .Where(r => byId.ContainsKey(r.BlockId))
+                .Select(r => new BlockOutcome(byId[r.BlockId].ContentHash, r.Status, Detail(byId[r.BlockId], r)))
+        ];
+    }
+
+    /// <summary>
+    /// The half of an archive line after the arrow. The tool descriptions the
+    /// change report already shows, so the screen and the file say the same
+    /// thing in the same words — a file that paraphrased the report would be a
+    /// second account to reconcile.
+    /// </summary>
+    private static string? Detail(DumpBlock block, BlockReport report)
+    {
+        if (report.Status == DumpBlockStatus.NeedsInput)
+        {
+            return block.Question;
+        }
+
+        var applied = report.Changes
+            .Where(c => c.Outcome == Tools.ToolOutcome.Success)
+            .Select(c => c.Description)
+            .ToList();
+
+        return applied.Count > 0 ? string.Join("; ", applied) : null;
     }
 
     /// <summary>

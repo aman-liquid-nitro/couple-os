@@ -12,6 +12,27 @@ namespace CoupleOS.Application.Capture;
 public sealed record SegmentedBlock(string RawText, byte[] ContentHash, int LineStart, int LineEnd);
 
 /// <summary>
+/// What a section of the file is for.
+///
+/// The reader and the writer have to agree on this exactly. If
+/// <see cref="FileRewriter"/> wrote a heading <see cref="BlockSegmenter"/> did
+/// not recognise as output, the next run would read its own archive back in and
+/// re-execute it — caught by the dedup index, but only after the whole archive
+/// had been through a model call each. One enum, one classifier, both sides.
+/// </summary>
+public enum SectionRole
+{
+    /// <summary>Anything the user might have written, including under a heading nobody planned for.</summary>
+    Input,
+
+    /// <summary>Parked clarifications. Written by a run, so never read back as input.</summary>
+    NeedsInput,
+
+    /// <summary>The archive. Written by a run, so never read back as input.</summary>
+    Processed,
+}
+
+/// <summary>
 /// Splits a dump file into blocks and identifies each one.
 ///
 /// Pure and static, like <see cref="Identity.SecretToken"/> and
@@ -56,7 +77,43 @@ public static partial class BlockSegmenter
     /// Headings the run itself writes. Matched on prefix because the date moves:
     /// "Processed — 11 Aug" and "Processed — 12 Aug" are the same section.
     /// </summary>
-    private static readonly string[] OutputSections = ["processed", "needs your input"];
+    private static readonly (string Prefix, SectionRole Role)[] OutputSections =
+    [
+        ("processed", SectionRole.Processed),
+        ("needs your input", SectionRole.NeedsInput),
+    ];
+
+    /// <summary>
+    /// The section a heading line opens, or null when the line is not a heading.
+    ///
+    /// Public because <see cref="FileRewriter"/> needs the same answer this class
+    /// acts on. A second implementation of "is this one of ours" is a second
+    /// chance to disagree, and the two halves disagreeing means the archive gets
+    /// read back as input.
+    /// </summary>
+    public static SectionRole? RoleOf(string line)
+    {
+        ArgumentNullException.ThrowIfNull(line);
+
+        var heading = Heading.Match(line.TrimEnd('\r'));
+
+        if (!heading.Success)
+        {
+            return null;
+        }
+
+        var title = heading.Groups["title"].Value.Trim();
+
+        foreach (var (prefix, role) in OutputSections)
+        {
+            if (title.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+            {
+                return role;
+            }
+        }
+
+        return SectionRole.Input;
+    }
 
     public static IReadOnlyList<SegmentedBlock> Segment(string? content)
     {
@@ -77,11 +134,10 @@ public static partial class BlockSegmenter
             var raw = lines[i].TrimEnd('\r');
             var lineNumber = i + 1;
 
-            var heading = Heading.Match(raw);
-            if (heading.Success)
+            if (RoleOf(raw) is { } role)
             {
                 Flush();
-                inOutputSection = IsOutputSection(heading.Groups["title"].Value);
+                inOutputSection = role != SectionRole.Input;
                 continue;
             }
 
@@ -157,13 +213,5 @@ public static partial class BlockSegmenter
             .Where(line => line.Length > 0);
 
         return string.Join('\n', lines);
-    }
-
-    private static bool IsOutputSection(string title)
-    {
-        var trimmed = title.Trim();
-
-        return OutputSections.Any(section =>
-            trimmed.StartsWith(section, StringComparison.OrdinalIgnoreCase));
     }
 }

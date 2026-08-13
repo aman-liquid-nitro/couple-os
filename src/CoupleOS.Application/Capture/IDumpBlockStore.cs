@@ -43,6 +43,23 @@ public interface IDumpBlockStore
         CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// The hashes of every block on this file an earlier run left failed.
+    ///
+    /// Hashes rather than rows, and a list rather than a count, because the
+    /// caller has to intersect them with what the file currently says: a failed
+    /// block whose line has since been edited away is gone as far as the reader
+    /// is concerned, and counting it would produce a warning about a line nobody
+    /// can find. The intersection is done in the application, where it can be
+    /// read, rather than by sending a bytea array into a query.
+    ///
+    /// Few rows in practice — a run that fails most of its blocks has a bigger
+    /// problem than this query's cost.
+    /// </summary>
+    Task<IReadOnlyList<byte[]>> FailedHashesAsync(
+        Guid dumpFileId,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Writes a block's terminal status, with the reason or question that goes
     /// with it, and stamps processed_at.
     ///

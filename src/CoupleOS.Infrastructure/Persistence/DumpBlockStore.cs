@@ -91,6 +91,15 @@ public sealed class DumpBlockStore(CoupleOsDbContext dbContext) : IDumpBlockStor
             .ThenBy(b => b.Id)
             .ToListAsync(cancellationToken);
 
+    public async Task<IReadOnlyList<byte[]>> FailedHashesAsync(
+        Guid dumpFileId,
+        CancellationToken cancellationToken = default) =>
+        await _dbContext.DumpBlocks
+            .AsNoTracking()
+            .Where(b => b.DumpFileId == dumpFileId && b.Status == DumpBlockStatus.Failed)
+            .Select(b => b.ContentHash)
+            .ToListAsync(cancellationToken);
+
     /// <summary>
     /// Raw SQL for the same reason AddNewAsync uses it: these rows were inserted
     /// with ids generated here and never tracked, so there is no entity for

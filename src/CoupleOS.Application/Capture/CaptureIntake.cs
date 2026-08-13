@@ -9,11 +9,23 @@ namespace CoupleOS.Application.Capture;
 /// re-run; "saw 0" is an empty file. One number could not tell them apart, and
 /// the change report has to.
 /// </param>
+/// <param name="Stranded">
+/// Blocks still in the file that an earlier run left failed, and that nothing
+/// will pick up again: <see cref="IDumpBlockStore.PendingAsync"/> reads only
+/// unprocessed rows (STATUS debt 24).
+///
+/// Counted because the file rewrite made it visible. It leaves settled lines
+/// filed and failed ones where they were, so the inbox of a couple who are up to
+/// date is often *exactly* the failures — and the report used to greet that with
+/// "all N blocks were processed by an earlier run", which is success language
+/// over a failed action and the thing SPEC.md 46 forbids.
+/// </param>
 public sealed record IntakeResult(
     Guid RunId,
     Guid DumpFileId,
     IReadOnlyList<DumpBlock> NewBlocks,
-    int BlocksSeen)
+    int BlocksSeen,
+    int Stranded)
 {
     /// <summary>
     /// Blocks the file already had. Also counts a thought written twice in the
@@ -73,8 +85,40 @@ public sealed class CaptureIntake(
         run.BlocksSeen = segmented.Count;
         await _runs.FinishAsync(run, cancellationToken);
 
+        var stranded = await CountStrandedAsync(file.Id, segmented, cancellationToken);
+
         await transaction.CommitAsync(cancellationToken);
 
-        return new IntakeResult(run.Id, file.Id, added, segmented.Count);
+        return new IntakeResult(run.Id, file.Id, added, segmented.Count, stranded);
+    }
+
+    /// <summary>
+    /// How many of the file's current blocks are failures nothing will retry.
+    ///
+    /// Intersected against what the file says right now, so a failed line the
+    /// user has since deleted does not produce a warning about a line that is not
+    /// there. Hex strings because byte[] has reference equality and a HashSet of
+    /// them would match nothing.
+    /// </summary>
+    private async Task<int> CountStrandedAsync(
+        Guid fileId,
+        IReadOnlyList<SegmentedBlock> segmented,
+        CancellationToken cancellationToken)
+    {
+        if (segmented.Count == 0)
+        {
+            return 0;
+        }
+
+        var failed = await _blocks.FailedHashesAsync(fileId, cancellationToken);
+
+        if (failed.Count == 0)
+        {
+            return 0;
+        }
+
+        var inTheFile = segmented.Select(b => Convert.ToHexString(b.ContentHash)).ToHashSet(StringComparer.Ordinal);
+
+        return failed.Count(hash => inTheFile.Contains(Convert.ToHexString(hash)));
     }
 }

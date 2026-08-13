@@ -16,15 +16,47 @@
     from the system losing their note.
 *@
 
-@if (Model.FileIsEmpty)
+@if (Model.NothingToRead)
 {
-    <p class="muted">The file is empty — there was nothing to read.</p>
+    @* Not "the file is empty": after a run has cleared the inbox behind itself,
+       the usual way to reach zero is a file full of archive with nothing new in
+       front of it. *@
+    <p class="muted">Nothing to read — there is nothing in the file that a run has not already handled.</p>
 }
 else if (Model.NothingToDo)
 {
-    <p class="muted">
-        Nothing new. All @Model.BlocksSeen @(Model.BlocksSeen == 1 ? "block" : "blocks")
-        in the file were processed by an earlier run.
+    @* "Processed by an earlier run" is only true of the blocks that succeeded.
+       Since the rewrite files those out of the inbox, what is usually left in
+       front of a couple who are up to date is precisely the failures — and
+       calling those processed is success language over a failed action, which
+       SPEC.md 46 forbids. So the two are separate sentences. *@
+    @if (Model.Stranded < Model.BlocksSeen)
+    {
+        <p class="muted">
+            Nothing new. @(Model.BlocksSeen - Model.Stranded)
+            @(Model.BlocksSeen - Model.Stranded == 1 ? "block" : "blocks")
+            in the file were handled by an earlier run.
+        </p>
+    }
+}
+
+@if (Model.Stranded > 0)
+{
+    @* Nothing retries a failed block (STATUS debt 24), so the line sits in the
+       inbox looking outstanding while every press of Process ignores it. Saying
+       so, and saying what to do about it, is the difference between a limitation
+       and a line quietly going nowhere. *@
+    <p class="warning">
+        @if (Model.Stranded == 1)
+        {
+            <text>One line in the file failed on an earlier run and will not be
+            retried on its own. Edit it and press Process again.</text>
+        }
+        else
+        {
+            <text>@Model.Stranded lines in the file failed on an earlier run and
+            will not be retried on their own. Edit them and press Process again.</text>
+        }
     </p>
 }
 else
@@ -87,9 +119,17 @@ else
 <p class="muted tally">
     @Model.Blocks.Count handled
     · @Model.BlocksSeen @(Model.BlocksSeen == 1 ? "block" : "blocks") in the file
-    @if (Model.AlreadyRecorded > 0)
+    @* Minus the stranded ones. AlreadyRecorded means "the file already had this
+       block", which is not the same as "it worked" — the failures are in that
+       number too, and they are called out above. Printing them here as well would
+       both double-count them and call them processed. *@
+    @if (Model.AlreadyRecorded - Model.Stranded > 0)
     {
-        <text>· @Model.AlreadyRecorded already processed</text>
+        <text>· @(Model.AlreadyRecorded - Model.Stranded) already processed</text>
+    }
+    @if (Model.Stranded > 0)
+    {
+        <text>· @Model.Stranded failed earlier</text>
     }
     @if (Model.Usage is { } usage)
     {

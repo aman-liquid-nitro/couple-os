@@ -110,6 +110,11 @@ internal static class BlockProcessorFakes
             CancellationToken cancellationToken = default) =>
             Task.FromResult<IReadOnlyList<DumpBlock>>([]);
 
+        public Task<IReadOnlyList<byte[]>> FailedHashesAsync(
+            Guid dumpFileId,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult<IReadOnlyList<byte[]>>([]);
+
         public Task MarkAsync(DumpBlock block, CancellationToken cancellationToken = default)
         {
             // Copied, not referenced. The processor mutates the block it was
