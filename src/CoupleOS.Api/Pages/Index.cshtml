@@ -7,14 +7,29 @@
     Write anything. Press Process when you are done — nothing happens until you do.
 </p>
 
-<form method="post" hx-post="/?handler=Process" hx-target="#report" hx-swap="innerHTML"
-      hx-disabled-elt="#process">
-    <textarea name="Text" id="Text" placeholder="we're out of detergent and coffee&#10;dinner at Priya's parents on Saturday 8pm"></textarea>
+@* The textarea is the file, not a message box: it opens holding whatever the
+   couple has written so far, and both partners are looking at the same text.
+   Version travels with it so the server can tell a stale save from a current
+   one; formaction states each button's handler, so which one was pressed is
+   carried by the request rather than inferred from the payload. *@
+
+<form method="post">
+    <textarea name="Text" id="Text"
+              placeholder="we're out of detergent and coffee&#10;dinner at Priya's parents on Saturday 8pm">@Model.Text</textarea>
+    <input type="hidden" name="Version" id="Version" value="@Model.Version" />
 
     <p>
-        <button type="submit" id="process">Process</button>
+        <button type="submit" id="process" formaction="/?handler=Process"
+                hx-post="/?handler=Process" hx-target="#report" hx-swap="innerHTML"
+                hx-disabled-elt="#process, #save">Process</button>
+
+        <button type="submit" id="save" formaction="/?handler=Save"
+                hx-post="/?handler=Save" hx-target="#save-state" hx-swap="innerHTML"
+                hx-disabled-elt="#process, #save">Save</button>
+
         <span class="muted htmx-indicator">thinking…</span>
     </p>
 </form>
 
+<div id="save-state" class="muted"></div>
 <div id="report"></div>

@@ -60,6 +60,45 @@ public sealed class DumpFileStore(
                 "The couple scope and the row's couple_id disagree.");
     }
 
+    public async Task<DumpFileSave> SaveSharedAsync(
+        string content,
+        int expectedVersion,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(content);
+
+        // Created on demand here too: the first thing a new couple does is type
+        // into an empty editor and save it, which is the same path as any other
+        // save and should not need a different one.
+        var file = await GetOrCreateSharedAsync(cancellationToken);
+
+        // content_version + 1 is computed by the database, not by adding one to
+        // the value this request read. The version that gets written is then the
+        // version that was checked, in one statement, with no window between.
+        //
+        // updated_at is set here because no trigger sets it. A column that is
+        // right only when someone remembers is worse than no column, so it is
+        // written in the one statement that changes the row.
+        var updated = await _dbContext.Database.ExecuteSqlAsync(
+            $"""
+             UPDATE dump_files
+                SET content = {content},
+                    content_version = content_version + 1,
+                    updated_at = now()
+              WHERE id = {file.Id}
+                AND content_version = {expectedVersion}
+             """,
+            cancellationToken);
+
+        // The tracked entity is stale either way — on success because the
+        // database incremented the version, on refusal because the other partner
+        // did. Raw SQL does not tell the change tracker anything, so reload
+        // rather than hand back an entity that disagrees with the row.
+        await _dbContext.Entry(file).ReloadAsync(cancellationToken);
+
+        return new DumpFileSave(updated == 1, file);
+    }
+
     private Task<DumpFile?> FindSharedAsync(Guid coupleId, CancellationToken cancellationToken) =>
         _dbContext.DumpFiles
             .FirstOrDefaultAsync(

@@ -22,6 +22,7 @@ namespace CoupleOS.IntegrationTests;
 /// nobody changed", which an index test would pass and a user would experience
 /// as their shopping list doubling.
 /// </summary>
+[Collection(SharedFileCollection.Name)]
 public sealed class CaptureIntakeTests : IClassFixture<RlsFixture>
 {
     private static ServiceProvider BuildProvider() =>
@@ -45,25 +46,28 @@ public sealed class CaptureIntakeTests : IClassFixture<RlsFixture>
     private static string Nonce() => Guid.NewGuid().ToString("N")[..8];
 
     /// <summary>
-    /// Writes the file's content the way the editor will, in its own request and
-    /// its own transaction, so what intake reads afterwards has genuinely been
+    /// Writes the file's content through the editor, in its own request and its
+    /// own transaction, so what intake reads afterwards has genuinely been
     /// through the database rather than through a tracked entity.
+    ///
+    /// This used to set Content on the entity and call SaveChanges, which wrote
+    /// the text and left content_version untouched — a state the editor cannot
+    /// produce. Now that the editor exists, the tests take the path a person
+    /// takes, and the version moves because a save moved it.
     /// </summary>
     private static async Task SetContentAsync(ServiceProvider provider, Guid couple, Guid user, string content)
     {
         await using var request = BeginRequest(provider, couple, user);
+        var editor = request.ServiceProvider.GetRequiredService<ISharedFileEditor>();
 
-        var unitOfWork = request.ServiceProvider.GetRequiredService<IScopedUnitOfWork>();
-        var files = request.ServiceProvider.GetRequiredService<IDumpFileStore>();
-        var db = request.ServiceProvider.GetRequiredService<CoupleOsDbContext>();
+        var current = await editor.ReadAsync();
+        var save = await editor.SaveAsync(content, current.Version);
 
-        await using var transaction = await unitOfWork.BeginAsync();
-
-        var file = await files.GetOrCreateSharedAsync();
-        file.Content = content;
-        await db.SaveChangesAsync();
-
-        await transaction.CommitAsync();
+        // Not an assertion about the editor — that is SharedFileEditorTests' job.
+        // It is a guard: a refusal here means something else wrote the file
+        // between those two calls, and every block count below would then be
+        // counting someone else's text.
+        Assert.True(save.Accepted, "The shared file changed underneath this test's setup.");
     }
 
     private static async Task<IntakeResult> IngestAsync(ServiceProvider provider, Guid couple, Guid user)

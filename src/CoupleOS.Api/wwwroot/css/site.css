@@ -29,6 +29,15 @@ input[type="email"], input[type="text"] {
     border: 1px solid var(--line); border-radius: 6px; background: #fff;
 }
 .warning { color: var(--warn); border-left: 3px solid var(--warn); padding-left: 0.7rem; }
+
+/* M2. What the other partner wrote, shown when a save is refused for being
+   stale. Scrolls rather than pushes the editor off the screen. */
+pre.their-copy {
+    max-height: 14rem; overflow: auto; padding: 0.7rem; margin: 0.3rem 0 0;
+    border: 1px solid var(--line); border-radius: 6px; background: #fff;
+    font-family: ui-monospace, monospace; font-size: 0.9rem; white-space: pre-wrap;
+}
+details summary { cursor: pointer; font-size: 0.9rem; color: var(--muted); }
 ul.report li { padding: 0.45rem 0; border-bottom: 1px solid var(--line); }
 
 /* htmx toggles this class while a request is in flight. */

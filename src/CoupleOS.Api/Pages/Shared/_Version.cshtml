@@ -1,0 +1,14 @@
+@model int
+
+@*
+    The file's version, swapped back into the form out of band.
+
+    Every response that writes the file carries this, and that is not decoration:
+    the version in the page is what the next write is checked against, so a
+    response that changed the row and left the input alone would make the user's
+    own next press conflict with their own last one. One partial, included by
+    every write response, so the rule is in one place rather than remembered
+    twice.
+*@
+
+<input type="hidden" name="Version" id="Version" value="@Model" hx-swap-oob="true" />

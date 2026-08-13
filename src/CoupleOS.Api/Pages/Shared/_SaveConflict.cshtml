@@ -1,0 +1,26 @@
+@using CoupleOS.Application.Capture
+@model SharedFileView
+
+@*
+    The other partner saved while this one was typing.
+
+    ADR 0009 settles this as last-write-wins with a stale-version warning, and
+    the warning is the whole of the mechanism: nothing is locked, nothing is
+    merged, and pressing Save again will overwrite what is shown below — the
+    version input has already moved on, so the second press succeeds. That is
+    deliberate. What is refused is the silent overwrite, not the overwrite.
+
+    Their text is rendered here rather than summarised, because the decision the
+    user is about to make is whether to replace it, and nobody can make that
+    decision from a count of lines.
+*@
+
+<p class="warning">
+    Not saved — your partner saved version @Model.Version while you were typing.
+    Your text is still in the box. Press Save again to replace theirs with yours.
+</p>
+
+<details>
+    <summary>What they wrote</summary>
+    <pre class="their-copy">@Model.Content</pre>
+</details>

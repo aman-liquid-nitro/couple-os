@@ -1,0 +1,13 @@
+@using CoupleOS.Application.Capture
+@model SharedFileSave
+
+@await Html.PartialAsync("_Version", Model.File.Version)
+
+@if (Model.Accepted)
+{
+    <span>saved · version @Model.File.Version</span>
+}
+else
+{
+    @await Html.PartialAsync("_SaveConflict", Model.File)
+}
