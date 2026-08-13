@@ -59,54 +59,73 @@ else if (Model.NothingToDo)
         }
     </p>
 }
-else
+
+@*
+    The buckets render beside that warning, not instead of it. This was the else
+    of the block above, which meant one line that failed on an earlier run hid
+    everything the current run had just done — including a question waiting to be
+    answered. The two facts are independent: the file has old failures in it, and
+    this run handled some blocks.
+
+    Named "bucket" rather than "section": @section is a Razor directive, and
+    @section.Heading is a compile error rather than a property access.
+*@
+@foreach (var bucket in new[]
 {
-    @* Named "bucket" rather than "section": @section is a Razor directive, and
-       @section.Heading is a compile error rather than a property access. *@
-    @foreach (var bucket in new[]
+    (Status: DumpBlockStatus.Processed,  Heading: "added"),
+    (Status: DumpBlockStatus.NeedsInput, Heading: "needs your input"),
+    (Status: DumpBlockStatus.Ignored,    Heading: "read, nothing to do"),
+    (Status: DumpBlockStatus.Failed,     Heading: "not applied"),
+})
+{
+    var included = Model.With(bucket.Status).ToList();
+
+    if (included.Count == 0)
     {
-        (Status: DumpBlockStatus.Processed,  Heading: "added"),
-        (Status: DumpBlockStatus.NeedsInput, Heading: "needs your input"),
-        (Status: DumpBlockStatus.Ignored,    Heading: "read, nothing to do"),
-        (Status: DumpBlockStatus.Failed,     Heading: "not applied"),
-    })
-    {
-        var included = Model.With(bucket.Status).ToList();
-
-        if (included.Count == 0)
-        {
-            continue;
-        }
-
-        <h2>@bucket.Heading</h2>
-        <ul class="report">
-            @foreach (var block in included)
-            {
-                <li>
-                    @* The user's own words first. A report phrased only in the
-                       system's vocabulary makes the reader hunt for which line
-                       it is talking about. *@
-                    <span class="block-text">@block.RawText</span>
-
-                    @if (block.Changes.Count > 0)
-                    {
-                        <ul class="changes">
-                            @foreach (var change in block.Changes)
-                            {
-                                <li class="@(change.Outcome == CoupleOS.Application.Tools.ToolOutcome.Success ? "" : "warning")">
-                                    @change.Description
-                                </li>
-                            }
-                        </ul>
-                    }
-                    else if (!string.IsNullOrWhiteSpace(block.Note))
-                    {
-                        <span class="muted note">@block.Note</span>
-                    }
-                </li>
-            }
-        </ul>
+        continue;
     }
+
+    <h2>@bucket.Heading</h2>
+
+    @if (bucket.Status == DumpBlockStatus.NeedsInput)
+    {
+        @* The questions are also in the file, under a heading of the same name,
+           and that is where they get answered — either partner, in their own
+           time (ADR 0009). Saying so here is what makes the parking legible as
+           a queue rather than as a run that half-failed. *@
+        <p class="muted">
+            These are waiting in the file under <em>Needs your input</em>.
+            Add a line below each one with the answer and press Process again.
+        </p>
+    }
+
+    <ul class="report">
+        @foreach (var block in included)
+        {
+            <li>
+                @* The user's own words first. A report phrased only in the
+                   system's vocabulary makes the reader hunt for which line it is
+                   talking about. *@
+                <span class="block-text">@block.RawText</span>
+
+                @if (block.Changes.Count > 0)
+                {
+                    <ul class="changes">
+                        @foreach (var change in block.Changes)
+                        {
+                            <li class="@(change.Outcome == CoupleOS.Application.Tools.ToolOutcome.Success ? "" : "warning")">
+                                @change.Description
+                            </li>
+                        }
+                    </ul>
+                }
+                else if (!string.IsNullOrWhiteSpace(block.Note))
+                {
+                    <span class="muted note">@block.Note</span>
+                }
+            </li>
+        }
+    </ul>
 }
 
 @*

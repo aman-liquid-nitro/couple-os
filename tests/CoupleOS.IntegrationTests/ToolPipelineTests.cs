@@ -121,6 +121,56 @@ public sealed class ToolPipelineTests : IClassFixture<RlsFixture>
     }
 
     [Fact]
+    public async Task Asking_a_question_writes_no_row_and_is_still_audited()
+    {
+        // The audit trail's shape for the one tool that creates nothing: a
+        // success with a null entity_type and a null entity_id. Both columns are
+        // nullable in data/schema.sql and until now nothing exercised that —
+        // every other successful call has a row to point at, so a NOT NULL on
+        // either would have gone unnoticed until this tool shipped.
+        var fragment = "dentist-" + Guid.NewGuid().ToString("N")[..8];
+
+        await using var provider = BuildProvider();
+        await using var request = BeginRequest(provider, RlsFixture.Couple1, RlsFixture.PartnerA);
+
+        var unitOfWork = request.ServiceProvider.GetRequiredService<IScopedUnitOfWork>();
+        var dispatcher = request.ServiceProvider.GetRequiredService<IToolDispatcher>();
+        var db = request.ServiceProvider.GetRequiredService<CoupleOsDbContext>();
+
+        await using var transaction = await unitOfWork.BeginAsync();
+
+        var before = await db.ShoppingItems.CountAsync();
+
+        var result = await dispatcher.DispatchAsync(
+            new LlmToolCall(
+                "request_clarification",
+                JsonDocument.Parse($"{{\"question\":\"when?\",\"about\":\"book the {fragment}\"}}")
+                    .RootElement.Clone()),
+            SharedContext());
+
+        Assert.True(result.Succeeded);
+        Assert.True(result.Asked);
+        Assert.Equal($"\"book the {fragment}\" — when?", result.Question);
+        Assert.Equal(before, await db.ShoppingItems.CountAsync());
+
+        // Found by tool name and recency rather than by matching the fragment
+        // inside arguments: the column is jsonb, and a LIKE over it is a query
+        // this test would be debugging instead of the behaviour it is about.
+        var audit = await db.AiActions
+            .Where(a => a.ToolName == "request_clarification")
+            .OrderByDescending(a => a.Id)
+            .FirstAsync();
+
+        Assert.Equal(ActionOutcome.Success, audit.Outcome);
+        Assert.Contains(fragment, audit.Arguments, StringComparison.Ordinal);
+        Assert.Null(audit.EntityType);
+        Assert.Null(audit.EntityId);
+        Assert.Null(audit.ErrorMessage);
+
+        await transaction.CommitAsync();
+    }
+
+    [Fact]
     public async Task A_call_that_tries_to_choose_its_own_couple_writes_nothing()
     {
         await using var provider = BuildProvider();

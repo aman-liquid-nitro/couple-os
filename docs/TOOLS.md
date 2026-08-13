@@ -157,6 +157,14 @@ Not for calendar arithmetic. "Saturday 8pm" is not missing information — it is
 `date_expression` the application resolves. Calling `request_clarification` for a
 resolvable date is a failure, and the eval set should assert against it.
 
+**Built.** The two arguments are composed into ADR 0009's `"fragment" —
+question` by the tool, because the model is the only thing that knows which half
+of a three-item note is in doubt. The tool itself writes nothing: it returns the
+question, and the block pipeline is what sets `status` and `question`. An open
+question outranks a success in the same block, so a line that both added
+something and asked something parks rather than being archived as done — see
+STATUS debt 31 for what that trade costs.
+
 ---
 
 ### 3. `create_shopping_item`

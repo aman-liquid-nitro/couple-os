@@ -76,7 +76,8 @@ public sealed class ToolDispatcher(IToolRegistry registry) : IToolDispatcher
                 execution.Outcome,
                 execution.EntityType,
                 execution.EntityId,
-                execution.Error is null ? null : [execution.Error]);
+                execution.Error is null ? null : [execution.Error],
+                execution.Question);
         }
         catch (OperationCanceledException)
         {

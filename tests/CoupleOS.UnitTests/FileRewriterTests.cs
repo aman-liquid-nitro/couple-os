@@ -134,10 +134,13 @@ public sealed class FileRewriterTests
     [Fact]
     public void A_parked_block_goes_to_needs_your_input_above_the_archive()
     {
+        // The detail arrives already carrying the fragment it is about, because
+        // RequestClarificationTool composes it from the two arguments the model
+        // supplied — the writer does not quote the block a second time.
         var file = FileRewriter.Rewrite(
             "- dinner was 2400\n- milk",
             [
-                Outcome("dinner was 2400", DumpBlockStatus.NeedsInput, "who paid?"),
+                Outcome("dinner was 2400", DumpBlockStatus.NeedsInput, "\"dinner was 2400\" — who paid?"),
                 Done("milk", "shopping: milk"),
             ],
             Today);
@@ -149,6 +152,27 @@ public sealed class FileRewriterTests
 
             ## Processed — 13 Aug 2026
             - ~~milk~~ → shopping: milk
+
+            """,
+            file);
+    }
+
+    [Fact]
+    public void A_parked_block_with_no_question_still_says_something_answerable()
+    {
+        // Cannot happen through the pipeline — the schema's
+        // dump_blocks_question_when_needs_input check refuses needs_input without
+        // a question — and the writer is a pure function reachable from anywhere,
+        // so the degenerate case gets a readable line rather than a dangling dash.
+        var file = FileRewriter.Rewrite(
+            "- dinner was 2400",
+            [Outcome("dinner was 2400", DumpBlockStatus.NeedsInput)],
+            Today);
+
+        Assert.Equal(
+            """
+            ## Needs your input
+            - "dinner was 2400" — what did you mean? Answer by adding a line below.
 
             """,
             file);

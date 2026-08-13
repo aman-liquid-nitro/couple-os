@@ -154,7 +154,8 @@ public sealed class BlockProcessor(
                 result.Outcome,
                 result.EntityType,
                 result.EntityId,
-                Describe(result, call)));
+                Describe(result, call),
+                result.Asked));
 
             if (result.Succeeded && result is { EntityType: { } type, EntityId: { } id })
             {
@@ -162,20 +163,44 @@ public sealed class BlockProcessor(
             }
         }
 
+        // An outstanding question outranks everything else the block did.
+        //
+        // It has to. A block that added detergent *and* asked who paid for dinner
+        // is not finished, and Processed is a terminal status the file archives —
+        // filing it would take the question out of the inbox and put it in a
+        // struck-through history line nobody reads. Parked, both halves survive:
+        // the row that was created stays created, and the question sits in
+        // "Needs your input" where either partner can answer it (ADR 0009).
+        //
+        // The cost is STATUS debt 31: answering by editing the line makes a new
+        // block, and the tools the first pass already ran will run again.
+        var questions = changes.Where(c => c.IsQuestion).Select(c => c.Description).ToList();
+
         // Refused by every call it made is a failure of this block, not a
         // success with footnotes. SPEC.md 46 forbids success language over a
         // failed action, and "processed" over a block that wrote nothing is
         // exactly that language.
-        var status = changes.Any(c => c.Outcome == ToolOutcome.Success)
-            ? DumpBlockStatus.Processed
-            : DumpBlockStatus.Failed;
+        var status = questions.Count > 0
+            ? DumpBlockStatus.NeedsInput
+            : changes.Any(c => c.Outcome == ToolOutcome.Success)
+                ? DumpBlockStatus.Processed
+                : DumpBlockStatus.Failed;
 
-        var note = status == DumpBlockStatus.Failed
-            ? string.Join("; ", changes.Select(c => c.Description))
-            : completion.Content;
+        var note = status switch
+        {
+            DumpBlockStatus.NeedsInput => string.Join(" ", questions),
+            DumpBlockStatus.Failed => string.Join("; ", changes.Select(c => c.Description)),
+            _ => completion.Content,
+        };
 
         block.Status = status;
         block.ErrorMessage = status == DumpBlockStatus.Failed ? Truncate(note) : null;
+
+        // Written together with the status, because the schema's
+        // dump_blocks_question_when_needs_input check refuses one without the
+        // other, and nulled on every other status in the same statement so the
+        // pair cannot be left half-applied by any path through here.
+        block.Question = status == DumpBlockStatus.NeedsInput ? Truncate(note) : null;
         block.ProcessedAt = _clock.GetUtcNow();
 
         await _blocks.MarkAsync(block, cancellationToken);
@@ -257,6 +282,14 @@ public sealed class BlockProcessor(
     /// </summary>
     private static string Describe(ToolResult result, LlmToolCall call)
     {
+        if (result.Asked)
+        {
+            // The question and nothing else. "request clarification: who paid?"
+            // names a mechanism the user has no reason to know about, and puts it
+            // in front of the only part of the line that is addressed to them.
+            return result.Question!;
+        }
+
         if (result.Succeeded)
         {
             return $"{Humanise(result.ToolName)}: {Summarise(call)}";

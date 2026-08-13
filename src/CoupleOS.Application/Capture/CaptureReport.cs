@@ -5,12 +5,19 @@ using CoupleOS.Domain.Enums;
 namespace CoupleOS.Application.Capture;
 
 /// <summary>One thing that happened, phrased for a person rather than a log.</summary>
+/// <param name="IsQuestion">
+/// True when this call asked rather than wrote. It succeeded and it created
+/// nothing, which is a combination every count in this file has to be told
+/// about: without it a clarification would be listed under "added" and counted
+/// in <c>dump_runs.entities_created</c>.
+/// </param>
 public sealed record CaptureChange(
     string ToolName,
     ToolOutcome Outcome,
     string? EntityType,
     Guid? EntityId,
-    string Description);
+    string Description,
+    bool IsQuestion = false);
 
 /// <summary>
 /// What became of one block, and the record that makes silence impossible.
@@ -122,9 +129,16 @@ public sealed record CaptureReport(
     public IEnumerable<BlockReport> With(DumpBlockStatus status) =>
         Blocks.Where(b => b.Status == status);
 
-    /// <summary>Applied changes across every block, for the "added" section.</summary>
+    /// <summary>
+    /// Applied changes across every block, for the "added" section.
+    ///
+    /// A question is excluded even though it succeeded. It is the only successful
+    /// call in the system that creates nothing, and counting it here would report
+    /// an entity created for a run whose whole output was a question —
+    /// <c>dump_runs.entities_created</c> is this sequence's length.
+    /// </summary>
     public IEnumerable<CaptureChange> Applied =>
-        Blocks.SelectMany(b => b.Changes).Where(c => c.Outcome == ToolOutcome.Success);
+        Blocks.SelectMany(b => b.Changes).Where(c => c.Outcome == ToolOutcome.Success && !c.IsQuestion);
 
     public IEnumerable<CaptureChange> Refused =>
         Blocks.SelectMany(b => b.Changes).Where(c => c.Outcome != ToolOutcome.Success);

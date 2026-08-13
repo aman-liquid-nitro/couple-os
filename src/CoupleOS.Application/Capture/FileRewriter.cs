@@ -173,9 +173,18 @@ public static class FileRewriter
 
         if (outcome.Status == DumpBlockStatus.NeedsInput)
         {
-            var question = Blank(outcome.Detail) ? "what did you mean?" : outcome.Detail!;
+            // The question arrives already carrying the fragment it is about —
+            // request_clarification composes ADR 0009's `"fragment" — question`
+            // from its two arguments, because the model is the only thing that
+            // knows which half of a three-item note is in doubt. Quoting the
+            // whole block here as well would print the line twice.
+            var question = Blank(outcome.Detail)
+                ? $"""
+                  "{text}" — what did you mean?
+                  """
+                : OneLine(outcome.Detail!);
 
-            return $"""- "{text}" — {question} Answer by adding a line below.""";
+            return $"- {question} Answer by adding a line below.";
         }
 
         var became = outcome.Status == DumpBlockStatus.Ignored || Blank(outcome.Detail)

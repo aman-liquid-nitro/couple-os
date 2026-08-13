@@ -81,17 +81,35 @@ public sealed record ToolValidation(bool IsValid, IReadOnlyList<string> Errors)
 }
 
 /// <summary>What a tool did. Entity references let the change report cite real rows.</summary>
+/// <param name="Question">
+/// What the caller has to answer before this input can be acted on. Set only by
+/// <see cref="RequestClarificationTool"/>, and the reason the pipeline can park a
+/// block without knowing that tool by name — a capability in the result rather
+/// than a string comparison on the tool's own.
+/// </param>
 public sealed record ToolExecution(
     ToolOutcome Outcome,
     string? EntityType = null,
     Guid? EntityId = null,
-    string? Error = null)
+    string? Error = null,
+    string? Question = null)
 {
     public static ToolExecution Created(string entityType, Guid entityId) =>
         new(ToolOutcome.Success, entityType, entityId);
 
     public static ToolExecution Failed(string error) =>
         new(ToolOutcome.ExecutionFailed, Error: error);
+
+    /// <summary>
+    /// Succeeded at asking, and wrote nothing.
+    ///
+    /// The outcome is Success because the call did what it was for: TOOLS.md 2a
+    /// makes this the only legal way to decline, so recording it as a failure
+    /// would put an error beside the one thing the model got right. Nothing was
+    /// created, which is why no entity comes with it.
+    /// </summary>
+    public static ToolExecution Asks(string question) =>
+        new(ToolOutcome.Success, Question: question);
 }
 
 /// <summary>The dispatcher's answer. Never an exception — a refusal is a result.</summary>
@@ -100,7 +118,15 @@ public sealed record ToolResult(
     ToolOutcome Outcome,
     string? EntityType = null,
     Guid? EntityId = null,
-    IReadOnlyList<string>? Errors = null)
+    IReadOnlyList<string>? Errors = null,
+    string? Question = null)
 {
     public bool Succeeded => Outcome == ToolOutcome.Success;
+
+    /// <summary>
+    /// True when this call asked rather than wrote. Read by the block pipeline to
+    /// park the block, and by the report to keep a question out of the list of
+    /// things that were added.
+    /// </summary>
+    public bool Asked => Question is { Length: > 0 };
 }

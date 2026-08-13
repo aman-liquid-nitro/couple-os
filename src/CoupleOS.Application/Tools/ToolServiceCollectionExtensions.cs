@@ -16,6 +16,12 @@ public static class ToolServiceCollectionExtensions
         // Adding a tool means adding a line here. Nothing else changes.
         services.AddScoped<ITool, CreateShoppingItemTool>();
 
+        // Registered alongside the writing tools rather than treated as part of
+        // the pipeline, because to the model it is one of the options and that is
+        // exactly the point: declining has to be as reachable as acting, or the
+        // rule against guessing has no compliant branch (TOOLS.md 2a).
+        services.AddScoped<ITool, RequestClarificationTool>();
+
         services.AddScoped<IToolRegistry>(sp => new ToolRegistry(sp.GetServices<ITool>()));
 
         services.AddScoped<IToolDispatcher>(sp => new AuditingToolDispatcher(
