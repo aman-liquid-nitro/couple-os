@@ -92,6 +92,12 @@ public sealed class IdentityDbContext(DbContextOptions<IdentityDbContext> option
             e.HasKey(x => x.Id);
             e.Property(x => x.Id).HasColumnName("id");
             e.Property(x => x.DisplayName).HasColumnName("display_name");
+
+            // Mapped for the date resolver (STATUS debt 22). couples has no
+            // row-level security — it is one of the six documented exceptions — so
+            // reading it needs no couple scope, which is what lets the resolver's
+            // clock sit outside IScopedUnitOfWork.
+            e.Property(x => x.TimeZoneId).HasColumnName("timezone");
         });
 
         b.Entity<CoupleMember>(e =>

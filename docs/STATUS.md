@@ -1,6 +1,6 @@
 # Status
 
-**Updated:** 2026-08-13 · **Milestone:** M2 met. M0 and M1 both fully met
+**Updated:** 2026-08-13 · **Milestone:** M3 started. M0, M1 and M2 all met
 
 This file records **state**. [IMPLEMENTATION_PLAN.md](./IMPLEMENTATION_PLAN.md)
 records **intent** — what each milestone is for and how it ends. Read the plan
@@ -15,10 +15,10 @@ updated speculatively is worse than none.
 
 | | |
 |---|---|
-| Milestone | M2 (capture surfaces) met; M0 and M1 closed |
+| Milestone | M3 (the seven tools) started; M0, M1, M2 closed |
 | Commits | 38 |
 | Architecture decisions | 13 |
-| Tests | 220 plus 42 SQL assertions, all shown capable of failing (7 need a model provider configured and fail without one) |
+| Tests | 253 plus 42 SQL assertions, all shown capable of failing (7 need a model provider configured and fail without one) |
 | Registered tools | 1 of the 7 writing tools (`create_shopping_item`), plus `request_clarification` |
 | Mapped tables | 13 of 28 (+ `users`, `couples`, `couple_members`, `auth_tokens`, `sessions`) |
 | Eval cases running | 4 of 55 |
@@ -134,6 +134,33 @@ that moved rather than closed: it needs a tool that arrives with M3.
 
 ---
 
+## M3 · The seven tools
+
+Started. Nothing on the exit list is met yet — the first slice is the machinery
+five of the six remaining tools cannot be written without.
+
+| Exit criterion | State |
+|---|---|
+| All seven tools work from both surfaces | 1 of 7 (`create_shopping_item`) |
+| A forced tool failure never produces success language | asserted on both surfaces already, for the tools that exist |
+
+**Done, and none of it a tool.** `DateExpressionResolver` and `ICoupleClock`
+(debt 22, paid). Five of the six remaining tools take a date expression, and
+`events.starts_at` is `NOT NULL` with no default, so the resolver is a
+prerequisite rather than a detail.
+
+**What the survey changed about the plan.** There is **no `reminders` table** —
+`create_reminder` writes `tasks` with `kind = 'reminder'`, and
+`tasks_reminder_needs_due` requires `due_at` when it does, so the distinction is
+one column and one constraint rather than two tables. Three entities
+(`tasks`, `expenses`, `events`) and **seven** enums (`memory_type`,
+`memory_assertion`, `memory_status`, `data_source`, `task_kind`, `task_status`,
+`priority_level`) do not exist in C# at all. A Domain entity named `Task` would
+shadow `System.Threading.Tasks.Task` in every async file that touches it, so it
+will not be called that.
+
+---
+
 ## What exists
 
 ### Database
@@ -160,6 +187,8 @@ that moved rather than closed: it needs a tool that arrives with M3.
 - `IPrivateThread` / `PrivateThread` — ADR 0009's private half, and the mirror of `CaptureProcessor` rather than a variant of it. What the two share is one provider, one registry, one dispatcher and therefore one tool path; what differs is arrival and reporting. The person's turn commits **before** the model is called, so a provider that is down costs a reply and not a message — and an unreachable model produces an assistant turn saying so, in its own transaction, for the same reason `BlockProcessor.FailAsync` needs one.
 - Clarification is in-band here, and reuses the shared surface's tool rather than sitting beside it: a `request_clarification` call becomes the reply, outranking the model's own prose. Verified in the browser that the live model instead asks in prose and calls nothing, which `ChatPrompt` rule 3 asks for — and crucially does not invent an item name.
 - The reply and the record are two fields, never folded together. A model can write "added that to your list" without calling the tool, and the only way a screen can contradict it is by holding both. The fallback for a silent model says how it went — `Recorded`, `Some of that went through`, `None of that went through` — and deliberately does not restate the change list: the first version did, and the browser showed one coffee twice.
+- `DateExpressionResolver` — verbatim expressions to instants, in the couple's timezone. Pure over (expression, now, zone), so its tests fix "now" and do not rot as the calendar moves — which is the mistake debt 21 records in the eval set. It **refuses rather than guesses**, because `events.starts_at` is `NOT NULL` and the tempting way to satisfy that is to invent something; and it **never completes an expression silently**, so a filled-in year, hour or weekday comes back as a stated assumption. A year-less date resolves to the next occurrence, so a birthday said in December means next September rather than eight months into the past. A local time inside a daylight-saving gap is moved to the first instant that exists and says so — unreachable in Asia/Kolkata, and the first couple to set another zone should not be the test.
+- `ICoupleClock` — reads `couples.timezone` once per request, on `IdentityDbContext` because `couples` has no row-level security and the read therefore needs no couple scope. The zone is cached and the instant is not, so a long run does not resolve its last block against the time its first one started. An unresolvable zone falls back to the schema's default and reports that it did, rather than failing somebody's reminder.
 - `CapturePrompt` — versioned (`2026-08-13.1`), because the eval set judges this exact text.
 - `ChatPrompt` — versioned (`2026-08-13.1`) and separate, because the two surfaces disagree about the rule that matters most in the other. CapturePrompt rule 1 forbids prose outright; here prose is the entire medium. No eval case judges it yet, so its version is a promise rather than a measurement. Rule 2 used to end "say nothing about it rather than guessing", which is what a model with no way to ask has to be told; it now names `request_clarification`, and rule 3 says outright that a date the person wrote is never a missing value.
 
@@ -223,7 +252,7 @@ citation at the wrong paragraph.
 **Blocking a specific future step**
 
 1. **`action_outcome` has no `confirmation_required` label.** `AiActionAuditSink` throws rather than substituting a near-enough value. A migration is owed before the first `Confirm`-tier tool ships. *(ADR 0008, M3)*
-2. **`memories` is mapped read-only.** `type` and `content` are `NOT NULL` with no default and are unmapped, so `create_memory` cannot be written until the entity carries them. `SchemaParityTests` records this rather than tolerating it silently. *(M3)*
+2. **`memories` is mapped read-only.** ~~`type` and `content`~~ **`type`** is `NOT NULL` with no default and unmapped, so `create_memory` cannot be written until the entity carries it. `content` *is* mapped and has been — this entry overstated the gap and was corrected while surveying M3, which is the point at which a wrong debt description starts misdirecting work rather than merely being untidy. The real gap is wider than one column in a different direction: `assertion`, `status`, `subject_key`, `source`, `confidence`, `importance` and `expires_at` all have database defaults, so they do not block a write, but `create_memory`'s schema takes five of them as arguments and none can be set today. `SchemaParityTests` records the blocking half rather than tolerating it silently. *(M3)*
 3. **`/health` is unauthenticated, and must stay that way.** The container probe has no credentials, so `SessionAuthenticationMiddleware` allow-lists it. It returns one word and never the exception text the logs carry; anything richer added there is readable by anyone who can reach the port.
 4. ~~**Data protection keys are not persisted.**~~ **Paid.** A named volume holds the key ring, and the Dockerfile creates the directory owned by uid 1654 so the volume inherits that rather than being created root-owned. Verified the way it used to fail: a page rendered by one container still POSTs after `up -d --build`. It stopped being theoretical when it locked the sign-in form during M2's browser verification — the stale cookie is HttpOnly, so the only ways through were clearing cookies by hand or browsing from a different hostname.
 5. **The invitation email does not name the inviter.** `invitedByDisplayName` is passed as null, so every invitation reads "Your partner has invited you". Wiring it needs the sender's display name, which is currently an email local part anyway — worth doing with the profile screen, not before. *(M2)*
@@ -255,8 +284,8 @@ citation at the wrong paragraph.
 18. **The RLS harnesses leave two tables behind.** `probe` and `t_results` persist in whatever database they ran against, unprotected and granted to the app role. Harmless in development, and something to remove before either harness is ever pointed at a deployed database.
 19. **`ai_actions.estimated_cost` is still unwritten**, deliberately: Ollama is free on both hosts, so any figure would be invented, and SPEC.md 50 wants one someone can act on. `provider`, `model`, `llm_role`, `prompt_tokens` and `completion_tokens` are now populated — token counts on one row per completion so `SUM` is the real figure rather than N times it. Map the cost column alongside the rate table that makes it meaningful.
 20. **Three environment variables in `.env.example` set nothing — two fixed, and the class of defect is the point.** `OLLAMA_KEEP_ALIVE` was read by no code and passed to no container (Ollama reads it as a *server* variable, and Ollama is not in the compose stack) — now removed from `.env.example` rather than left implying it worked. `LLM_FAST_MODEL`/`LLM_DEEP_MODEL` reached the container as `Llm__Roles__*` while `OllamaOptions` binds `Llm:Ollama:*` — fixed in compose, but the pattern is the point: a documented variable that quietly does nothing outlasts the person who wrote it. Nothing asserts that a configuration key is read by anyone.
-21. **The eval set still encodes the pre-fix date contract.** Eight cases in `data/eval-cases.jsonl` expect resolved timestamps — `"due_at": "2026-08-12"`, `"starts_at": "2026-12-14"` — which is now the behaviour TOOLS.md forbids. They are inert because those tools are unregistered and `EvalCoverage` reports them blocked, so M3 unblocks tests that assert the wrong thing. Two problems, not one: the contract is wrong *and* a hard-coded absolute date rots as "today" moves. Not rewritten here — expectations are a measurement decision, and they belong with the milestone that registers the tools and can watch them pass. *(M3)*
-22. **Date resolution has nowhere to live.** TOOLS.md now declares expression fields on all eight date arguments, and the resolver they imply does not exist. It needs the couple's timezone, which `ToolExecutionContext` does not carry — `couples.timezone` and `users.timezone` are in the schema and unread. Owed before the first date-bearing tool ships. *(M3)*
+21. **The eval set still encodes the pre-fix date contract.** ~~Eight~~ **Six** cases in `data/eval-cases.jsonl` expect resolved timestamps — `happy-003`, `happy-005`, `happy-006`, `multi-001`, `multi-002` carry absolute dates like `"due_at": "2026-08-12"` and `"starts_at": "2026-12-14"`, and `amb-006` carries `"expires_at": "+30d"`, which is expression-shaped in a field named for the resolved column. Eight was wrong and counted the two clarification cases (`amb-001`, `unknowndate-002`) that name `due_at`/`starts_at` only in `clarification_about`, where the old field name is *correct* — the question genuinely is about the resolved column. Counted properly while surveying M3. **A grep for any `*_expression` key in the file returns zero**, so the set does not merely encode the old contract, it has no example of the new one. They are inert because those tools are unregistered and `EvalCoverage` reports them blocked, so M3 unblocks tests that assert the wrong thing. Two problems, not one: the contract is wrong *and* a hard-coded absolute date rots as "today" moves. Not rewritten here — expectations are a measurement decision, and they belong with the milestone that registers the tools and can watch them pass. *(M3)*
+22. ~~**Date resolution has nowhere to live.**~~ **Paid.** `DateExpressionResolver` is a pure function over (expression, now, zone), and `ICoupleClock` reads `couples.timezone` once per request — the first line of C# to consult a column that had a default and no reader for three milestones, which is debt 20's shape. Two rules carry it: it refuses rather than guesses, because `events.starts_at` is `NOT NULL` and the tempting way to satisfy that is to invent something; and it never completes an expression silently, so filling in a year, an hour or which Friday comes back as a stated assumption. The grammar is a small closed set and the list it refuses — "sometime next month", "after the wedding", "soon" — is as tested as the list it accepts. The timezone landed on the tools rather than on `ToolExecutionContext` as this entry predicted: that record is "everything a tool is allowed to know about who is calling", and a clock is a service, not caller identity. **`users.timezone` is still unread** — per-person zones are a real feature and V0 has no screen that would set one.
 23. **No CI.** Deliberately deferred. "CI gate" currently means a command someone remembers to run.
 24. **A failed block is never retried, and now the report at least says so.** `PendingAsync` reads `unprocessed`, so a block that failed because Ollama was unreachable stays failed and pressing Process again does nothing for it. The rewrite made this visible rather than merely true: it files the successes out of the inbox, so what is left in front of a couple who are up to date is *precisely* the failures — and the report used to greet that with "all 1 block in the file were processed by an earlier run", which is success language over a failed action and exactly what SPEC.md 46 forbids. `CaptureReport.Stranded` now counts the failed blocks the file still contains, intersected against what the file currently says so a line the user deleted stops being warned about, and the report names them and says to edit and re-press. **The retry itself is still owed.** The narrow version is the right one: re-run `failed` alone, not `ignored`, which is why the blanket retry was rejected here in the first place. *(M3)*
 25. **A run's cost is now per block, and it shows.** Eleven blocks took 26.9s against `gemma4:31b` at ~2.4s each, with the full tool catalogue in every prompt. This is debt 8 arriving as a measurement rather than a projection: the levers in ADR 0011 — filter tools per block, or batch blocks per call — are the same, and the second one trades away the per-block status this milestone was built for. *(M3)*

@@ -2,12 +2,14 @@ using CoupleOS.Application.Capture;
 using CoupleOS.Application.Conversation;
 using CoupleOS.Application.Identity;
 using CoupleOS.Application.Persistence;
+using CoupleOS.Application.Time;
 using CoupleOS.Application.Tools;
 using CoupleOS.Domain.Enums;
 using CoupleOS.Application.Security;
 using CoupleOS.Infrastructure.Identity;
 using CoupleOS.Infrastructure.Persistence;
 using CoupleOS.Infrastructure.Security;
+using CoupleOS.Infrastructure.Time;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
@@ -60,6 +62,10 @@ public static class InfrastructureServiceCollectionExtensions
         services.AddScoped<IDumpRunStore, DumpRunStore>();
 
         services.AddScoped<IConversationStore, ConversationStore>();
+
+        // Scoped, because it caches the couple's zone for the request: a dump run
+        // resolves a date per block and a couple does not move between them.
+        services.AddScoped<ICoupleClock, CoupleClock>();
 
         services.AddScoped<IToolAuditSink, AiActionAuditSink>();
 
