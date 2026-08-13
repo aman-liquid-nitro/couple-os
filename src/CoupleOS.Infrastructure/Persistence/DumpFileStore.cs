@@ -99,6 +99,19 @@ public sealed class DumpFileStore(
         return new DumpFileSave(updated == 1, file);
     }
 
+    public async Task MarkProcessedAsync(
+        Guid fileId,
+        DateTimeOffset processedAt,
+        CancellationToken cancellationToken = default) =>
+        await _dbContext.Database.ExecuteSqlAsync(
+            $"""
+             UPDATE dump_files
+                SET last_processed_at = {processedAt},
+                    updated_at = now()
+              WHERE id = {fileId}
+             """,
+            cancellationToken);
+
     private Task<DumpFile?> FindSharedAsync(Guid coupleId, CancellationToken cancellationToken) =>
         _dbContext.DumpFiles
             .FirstOrDefaultAsync(

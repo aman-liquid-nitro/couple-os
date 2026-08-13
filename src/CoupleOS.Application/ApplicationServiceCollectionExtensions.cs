@@ -12,6 +12,7 @@ public static class ApplicationServiceCollectionExtensions
     {
         services.AddCoupleOsTools();
         services.AddScoped<ICaptureProcessor, CaptureProcessor>();
+        services.AddScoped<IBlockProcessor, BlockProcessor>();
         services.AddScoped<ICaptureIntake, CaptureIntake>();
         services.AddScoped<ISharedFileEditor, SharedFileEditor>();
         services.AddScoped<IMagicLinkService, MagicLinkService>();

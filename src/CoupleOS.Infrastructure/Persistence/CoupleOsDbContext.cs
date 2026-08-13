@@ -96,10 +96,16 @@ public sealed class CoupleOsDbContext(DbContextOptions<CoupleOsDbContext> option
             e.Property(x => x.StartedAt).HasColumnName("started_at");
             e.Property(x => x.FinishedAt).HasColumnName("finished_at");
             e.Property(x => x.BlocksSeen).HasColumnName("blocks_seen");
+            e.Property(x => x.BlocksProcessed).HasColumnName("blocks_processed");
+            e.Property(x => x.BlocksNeedingInput).HasColumnName("blocks_needing_input");
+            e.Property(x => x.BlocksFailed).HasColumnName("blocks_failed");
+            e.Property(x => x.EntitiesCreated).HasColumnName("entities_created");
+            e.Property(x => x.EntitiesUpdated).HasColumnName("entities_updated");
 
-            // The remaining counters and report keep their database defaults
-            // until the run that fills them exists. Mapping a column to restate
-            // its default invites the two definitions to drift.
+            // jsonb stated explicitly. Without it the string maps to text and
+            // Postgres refuses the insert rather than casting, which is the
+            // right refusal found at the wrong time.
+            e.Property(x => x.Report).HasColumnName("report").HasColumnType("jsonb");
         });
 
         b.Entity<DumpBlock>(e =>
@@ -117,6 +123,9 @@ public sealed class CoupleOsDbContext(DbContextOptions<CoupleOsDbContext> option
             e.Property(x => x.LineEnd).HasColumnName("line_end");
             e.Property(x => x.Status).HasColumnName("status");
             e.Property(x => x.RunId).HasColumnName("run_id");
+            e.Property(x => x.ErrorMessage).HasColumnName("error_message");
+            e.Property(x => x.Question).HasColumnName("question");
+            e.Property(x => x.ProcessedAt).HasColumnName("processed_at");
         });
 
         // NO global query filter on couple_id or visibility, and that is a

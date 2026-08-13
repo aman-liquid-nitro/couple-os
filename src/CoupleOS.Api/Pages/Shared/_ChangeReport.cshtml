@@ -1,55 +1,102 @@
 @using CoupleOS.Application.Capture
+@using CoupleOS.Domain.Enums
 @model CaptureReport
 
 @*
-    The change report. ADR 0009 chose an explicit Process button over silent
-    background extraction precisely so this exists: the system states what it
-    understood, and the user corrects it while the context is still in their
-    head.
+    The change report, and the one screen M2 was built to make honest.
 
-    Refusals are shown as prominently as successes. SPEC.md 46 forbids success
-    language over a failed action, and a refusal the user never sees is
-    indistinguishable from the system losing their note.
+    It is rendered from the blocks, not from the actions. The M0 version listed
+    what the run did, so a line the model ignored produced no line here and
+    disappeared — an event, on the first real run, seen by nobody. Every block
+    the run touched appears below whatever became of it, and the ones it did not
+    touch are counted, so the numbers at the bottom always add up to the file.
+
+    Refusals are as prominent as successes. SPEC.md 46 forbids success language
+    over a failed action, and a refusal the user never sees is indistinguishable
+    from the system losing their note.
 *@
 
-@if (Model.DidNothing)
+@if (Model.FileIsEmpty)
+{
+    <p class="muted">The file is empty — there was nothing to read.</p>
+}
+else if (Model.NothingToDo)
 {
     <p class="muted">
-        Nothing actionable found.
-        @if (!string.IsNullOrWhiteSpace(Model.ModelSaid))
-        {
-            <span>The model said: @Model.ModelSaid</span>
-        }
+        Nothing new. All @Model.BlocksSeen @(Model.BlocksSeen == 1 ? "block" : "blocks")
+        in the file were processed by an earlier run.
     </p>
 }
 else
 {
-    @if (Model.Applied.Count > 0)
+    @* Named "bucket" rather than "section": @section is a Razor directive, and
+       @section.Heading is a compile error rather than a property access. *@
+    @foreach (var bucket in new[]
     {
-        <h2>Added</h2>
-        <ul class="report">
-            @foreach (var change in Model.Applied)
-            {
-                <li>@change.Description</li>
-            }
-        </ul>
-    }
+        (Status: DumpBlockStatus.Processed,  Heading: "added"),
+        (Status: DumpBlockStatus.NeedsInput, Heading: "needs your input"),
+        (Status: DumpBlockStatus.Ignored,    Heading: "read, nothing to do"),
+        (Status: DumpBlockStatus.Failed,     Heading: "not applied"),
+    })
+    {
+        var included = Model.With(bucket.Status).ToList();
 
-    @if (Model.Refused.Count > 0)
-    {
-        <h2>Not applied</h2>
+        if (included.Count == 0)
+        {
+            continue;
+        }
+
+        <h2>@bucket.Heading</h2>
         <ul class="report">
-            @foreach (var change in Model.Refused)
+            @foreach (var block in included)
             {
-                <li>@change.Description</li>
+                <li>
+                    @* The user's own words first. A report phrased only in the
+                       system's vocabulary makes the reader hunt for which line
+                       it is talking about. *@
+                    <span class="block-text">@block.RawText</span>
+
+                    @if (block.Changes.Count > 0)
+                    {
+                        <ul class="changes">
+                            @foreach (var change in block.Changes)
+                            {
+                                <li class="@(change.Outcome == CoupleOS.Application.Tools.ToolOutcome.Success ? "" : "warning")">
+                                    @change.Description
+                                </li>
+                            }
+                        </ul>
+                    }
+                    else if (!string.IsNullOrWhiteSpace(block.Note))
+                    {
+                        <span class="muted note">@block.Note</span>
+                    }
+                </li>
             }
         </ul>
     }
 }
 
-@if (Model.Usage is { } usage)
-{
-    <p class="muted">
-        @usage.Model · @usage.PromptTokens in, @usage.CompletionTokens out · @usage.Duration.TotalSeconds.ToString("0.0")s
-    </p>
-}
+@*
+    Handled and in-the-file are two different numbers and are printed as two,
+    because they genuinely differ: a run also picks up blocks an earlier run
+    abandoned, and those belong to text that may since have been edited away.
+    Printing only the file's count next to a longer list is how a tally starts
+    lying.
+*@
+<p class="muted tally">
+    @Model.Blocks.Count handled
+    · @Model.BlocksSeen @(Model.BlocksSeen == 1 ? "block" : "blocks") in the file
+    @if (Model.AlreadyRecorded > 0)
+    {
+        <text>· @Model.AlreadyRecorded already processed</text>
+    }
+    @if (Model.Usage is { } usage)
+    {
+        <text>
+            · @usage.Model, @usage.Calls @(usage.Calls == 1 ? "call" : "calls")
+            · @usage.PromptTokens in, @usage.CompletionTokens out
+            · @usage.Duration.TotalSeconds.ToString("0.0")s
+        </text>
+    }
+</p>

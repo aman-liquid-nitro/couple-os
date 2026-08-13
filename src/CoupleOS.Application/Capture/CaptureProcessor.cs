@@ -1,155 +1,163 @@
-using CoupleOS.Application.AI;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using CoupleOS.Application.Persistence;
-using CoupleOS.Application.Security;
-using CoupleOS.Application.Tools;
+using CoupleOS.Domain.Entities;
+using CoupleOS.Domain.Enums;
 
 namespace CoupleOS.Application.Capture;
 
 /// <summary>
-/// Joins the two halves of the system: a model that proposes, and a tool layer
-/// that disposes.
+/// One press of Process: read the file, turn it into blocks, take each block
+/// through the pipeline, and account for all of them.
 ///
-/// It orchestrates and nothing else. It does not talk to a model directly, does
-/// not know what a tool does, does not open connections and does not render.
-/// Each of those belongs to something it depends on, which is what lets this be
-/// unit-tested against a fake provider without a database or a GPU.
+/// It orchestrates and nothing else. It does not talk to a model, does not know
+/// what a tool does, and does not render. Each of those belongs to something it
+/// depends on, which is what lets this be unit-tested without a database or a
+/// GPU.
 /// </summary>
 public sealed class CaptureProcessor(
-    ILlmProvider llmProvider,
-    IToolRegistry toolRegistry,
-    IToolDispatcher toolDispatcher,
+    ICaptureIntake intake,
+    IBlockProcessor blockProcessor,
+    IDumpBlockStore blocks,
+    IDumpFileStore files,
+    IDumpRunStore runs,
     IScopedUnitOfWork unitOfWork,
-    ICoupleScopeAccessor scopeAccessor) : ICaptureProcessor
+    TimeProvider clock) : ICaptureProcessor
 {
-    private readonly ILlmProvider _llmProvider = llmProvider ?? throw new ArgumentNullException(nameof(llmProvider));
-    private readonly IToolRegistry _toolRegistry = toolRegistry ?? throw new ArgumentNullException(nameof(toolRegistry));
-    private readonly IToolDispatcher _toolDispatcher = toolDispatcher ?? throw new ArgumentNullException(nameof(toolDispatcher));
+    private readonly ICaptureIntake _intake = intake ?? throw new ArgumentNullException(nameof(intake));
+    private readonly IBlockProcessor _blockProcessor = blockProcessor ?? throw new ArgumentNullException(nameof(blockProcessor));
+    private readonly IDumpBlockStore _blocks = blocks ?? throw new ArgumentNullException(nameof(blocks));
+    private readonly IDumpFileStore _files = files ?? throw new ArgumentNullException(nameof(files));
+    private readonly IDumpRunStore _runs = runs ?? throw new ArgumentNullException(nameof(runs));
     private readonly IScopedUnitOfWork _unitOfWork = unitOfWork ?? throw new ArgumentNullException(nameof(unitOfWork));
-    private readonly ICoupleScopeAccessor _scopeAccessor = scopeAccessor ?? throw new ArgumentNullException(nameof(scopeAccessor));
+    private readonly TimeProvider _clock = clock ?? throw new ArgumentNullException(nameof(clock));
 
-    public async Task<CaptureReport> ProcessAsync(
-        string text,
-        CaptureSurface surface,
-        CancellationToken cancellationToken = default)
+    /// <summary>
+    /// Enums as names, not as the numbers a future reordering would silently
+    /// change the meaning of. This JSON is read by people looking at a row months
+    /// later, and "2" is not a status.
+    /// </summary>
+    private static readonly JsonSerializerOptions ReportJson = new()
     {
-        if (string.IsNullOrWhiteSpace(text))
+        Converters = { new JsonStringEnumConverter() },
+        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+    };
+
+    public async Task<CaptureReport> ProcessAsync(CancellationToken cancellationToken = default)
+    {
+        var intake = await _intake.IngestAsync(cancellationToken);
+
+        // Everything still unprocessed on this file, not only what intake just
+        // recorded. The difference matters after a run that died halfway: its
+        // blocks are in the table, they are nobody's "new" blocks any more, and
+        // reading only intake's output would strand them as unprocessed forever.
+        var pending = await ReadPendingAsync(intake.DumpFileId, cancellationToken);
+
+        var reports = new List<BlockReport>(pending.Count);
+
+        foreach (var block in pending)
         {
-            return CaptureReport.Empty;
+            // One transaction per block lives inside this call. A failure in the
+            // last block of a two-hundred-line dump no longer discards the
+            // hundred and ninety-nine successes before it, which is STATUS debt 7
+            // and the reason intake commits separately from processing.
+            reports.Add(await _blockProcessor.ProcessAsync(block, cancellationToken));
         }
 
-        var scope = _scopeAccessor.Current;
+        var report = new CaptureReport(
+            reports,
+            intake.BlocksSeen,
 
-        // Held in a local so the role recorded in the audit trail cannot drift from
-        // the role actually requested.
-        const LlmRole role = LlmRole.Fast;
+            // Intake's own figure: blocks the file already had, which is exactly
+            // the dedup hits. Subtracting what this run handled would be wrong
+            // and was — a run can handle blocks the file no longer contains,
+            // because editing a line out of the file does not delete the block it
+            // made (ADR 0009: the file is the input, the rows are the state). On
+            // the first run after a crashed one, "seen minus handled" went
+            // negative, and a negative count of already-processed blocks was
+            // rendered as nothing at all rather than as the nonsense it was.
+            intake.AlreadyRecorded,
+            Summarise(reports));
 
-        var completion = await _llmProvider.CompleteAsync(
-            new LlmRequest(
-                role,
-                [
-                    new LlmMessage(LlmMessageRole.System, CapturePrompt.System),
-                    new LlmMessage(LlmMessageRole.User, text),
-                ],
-                [.. _toolRegistry.All.Select(t => new LlmTool(t.Name, t.Description, t.ParametersSchema))]),
-            cancellationToken);
+        await FinishAsync(intake, report, cancellationToken);
 
-        if (completion.ToolCalls.Count == 0)
-        {
-            // Nothing actionable, or the model narrated instead of calling.
-            // Either way nothing was written, and saying so beats silence.
-            return new CaptureReport([], [], completion.Content, completion.Usage);
-        }
+        return report;
+    }
 
-        var context = new ToolExecutionContext
-        {
-            CoupleId = scope.CoupleId,
-            UserId = scope.UserId,
-
-            // Derived from the surface, never from the text (ADR 0009).
-            Visibility = surface.ToVisibility(),
-        };
-
-        var applied = new List<CaptureChange>();
-        var refused = new List<CaptureChange>();
-
-        // One transaction for the whole run: the rows and their audit entries
-        // commit together, or a change report could cite something that was
-        // rolled back.
+    private async Task<IReadOnlyList<DumpBlock>> ReadPendingAsync(Guid fileId, CancellationToken cancellationToken)
+    {
         await using var transaction = await _unitOfWork.BeginAsync(cancellationToken);
-
-        // One completion, N calls, billed once. The counts go on the first row and
-        // are omitted from the rest, so summing the column over a couple gives the
-        // real figure instead of N times it (SPEC.md 50). See LlmAttribution.
-        var attribution = LlmAttribution.From(completion.Usage, role);
-        var carriesTokens = true;
-
-        foreach (var call in completion.ToolCalls)
-        {
-            var callContext = context with
-            {
-                Attribution = carriesTokens ? attribution : attribution.WithoutTokens(),
-            };
-
-            carriesTokens = false;
-
-            var result = await _toolDispatcher.DispatchAsync(call, callContext, cancellationToken);
-
-            var change = new CaptureChange(
-                result.ToolName,
-                result.Outcome,
-                result.EntityType,
-                result.EntityId,
-                Describe(result, call));
-
-            if (result.Succeeded)
-            {
-                applied.Add(change);
-            }
-            else
-            {
-                refused.Add(change);
-            }
-        }
-
+        var pending = await _blocks.PendingAsync(fileId, cancellationToken);
         await transaction.CommitAsync(cancellationToken);
 
-        return new CaptureReport(applied, refused, completion.Content, completion.Usage);
+        return pending;
     }
 
     /// <summary>
-    /// Plain language, including for failures. SPEC.md 46 forbids success
-    /// language over a failed action, and a refusal the user cannot understand
-    /// is indistinguishable from the system quietly losing their note.
+    /// Closes the run: the counters, the report, and the file's last_processed_at.
+    ///
+    /// In its own transaction, after every block has finished in its own. A run
+    /// row that committed with the blocks would have to be the same transaction
+    /// as one of them, and would then roll back with it.
     /// </summary>
-    private static string Describe(ToolResult result, LlmToolCall call)
+    private async Task FinishAsync(
+        IntakeResult intake,
+        CaptureReport report,
+        CancellationToken cancellationToken)
     {
-        if (result.Succeeded)
-        {
-            return $"{Humanise(result.ToolName)}: {Summarise(call)}";
-        }
+        await using var transaction = await _unitOfWork.BeginAsync(cancellationToken);
 
-        var reason = result.Errors is { Count: > 0 }
-            ? string.Join("; ", result.Errors)
-            : result.Outcome.ToString();
+        var run = await _runs.GetAsync(intake.RunId, cancellationToken)
+            ?? throw new InvalidOperationException(
+                $"Run {intake.RunId} vanished between intake and its own completion.");
 
-        return $"{Humanise(result.ToolName)} was not applied — {reason}";
+        // blocks_processed counts blocks this run took to a settled state —
+        // including the ignored ones, because reading a line and deciding it
+        // needs no action is work done, not work skipped. The two columns beside
+        // it exist so that "processed" never has to quietly mean "attempted".
+        run.BlocksProcessed = report.Blocks.Count(b =>
+            b.Status is DumpBlockStatus.Processed or DumpBlockStatus.Ignored);
+
+        run.BlocksNeedingInput = report.Blocks.Count(b => b.Status == DumpBlockStatus.NeedsInput);
+        run.BlocksFailed = report.Blocks.Count(b => b.Status == DumpBlockStatus.Failed);
+        run.EntitiesCreated = report.Applied.Count();
+        run.Report = JsonSerializer.Serialize(report, ReportJson);
+
+        await _runs.FinishAsync(run, cancellationToken);
+
+        // Stamped even when the run changed nothing. "Last processed" answers
+        // "has anyone pressed the button since I wrote this", and a run that
+        // found nothing to do still answers it.
+        await _files.MarkProcessedAsync(intake.DumpFileId, _clock.GetUtcNow(), cancellationToken);
+
+        await transaction.CommitAsync(cancellationToken);
     }
 
-    private static string Humanise(string toolName) => toolName.Replace('_', ' ');
-
-    private static string Summarise(LlmToolCall call)
+    /// <summary>
+    /// Sums what the blocks cost. Provider and model come from the first block
+    /// that called a model — within one run they are the same for all of them,
+    /// and a run where they were not would be a run whose configuration changed
+    /// mid-flight.
+    /// </summary>
+    private static RunUsage? Summarise(IReadOnlyList<BlockReport> reports)
     {
-        // The first string argument is nearly always the human-meaningful one:
-        // an item's name, a task's title, an event's title.
-        foreach (var property in call.Arguments.EnumerateObject())
+        var used = reports.Select(r => r.Usage).OfType<AI.LlmUsage>().ToList();
+
+        if (used.Count == 0)
         {
-            if (property.Value.ValueKind == System.Text.Json.JsonValueKind.String &&
-                property.Value.GetString() is { Length: > 0 } value)
-            {
-                return value;
-            }
+            return null;
         }
 
-        return call.Arguments.GetRawText();
+        return new RunUsage(
+            used[0].Provider,
+            used[0].Model,
+            used.Count,
+            used.Sum(u => u.PromptTokens),
+            used.Sum(u => u.CompletionTokens),
+
+            // Wall clock is what the person waited, and these ran one after
+            // another, so the sum is the wait. It becomes a lie the day blocks
+            // run in parallel, and that day this line has to change with them.
+            TimeSpan.FromTicks(used.Sum(u => u.Duration.Ticks)));
     }
 }

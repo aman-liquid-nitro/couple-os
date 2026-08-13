@@ -2,6 +2,16 @@ using CoupleOS.Domain.Entities;
 
 namespace CoupleOS.Application.Capture;
 
+/// <summary>
+/// A row a block produced, for dump_block_entities.
+/// </summary>
+/// <param name="Action">
+/// created | updated | completed | superseded, as the schema's column documents.
+/// A string rather than an enum because the set is the vocabulary of every tool
+/// this system will ever have, and V0 registers one of seven.
+/// </param>
+public sealed record BlockEntity(string EntityType, Guid EntityId, string Action);
+
 public interface IDumpBlockStore
 {
     /// <summary>
@@ -18,5 +28,42 @@ public interface IDumpBlockStore
         DumpFile file,
         IReadOnlyList<SegmentedBlock> blocks,
         Guid runId,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Every block on this file still waiting to be processed, oldest line first.
+    ///
+    /// Reads by status rather than by run, which is what lets a run pick up
+    /// blocks an earlier one abandoned. A crash between intake and processing
+    /// leaves rows that belong to a finished run and have never been looked at;
+    /// asking "what did I just insert" would strand them permanently.
+    /// </summary>
+    Task<IReadOnlyList<DumpBlock>> PendingAsync(
+        Guid dumpFileId,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Writes a block's terminal status, with the reason or question that goes
+    /// with it, and stamps processed_at.
+    ///
+    /// Status, error and question move together because the schema requires it:
+    /// dump_blocks_question_when_needs_input refuses needs_input without a
+    /// question. Writing them in one statement means the constraint is checked
+    /// against the state the caller intended rather than against a half-applied
+    /// version of it.
+    /// </summary>
+    Task MarkAsync(DumpBlock block, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Links a block to the rows it produced.
+    ///
+    /// This is what makes "which line did this expense come from" answerable, and
+    /// the reverse — deleting a line in the file does not delete the expense
+    /// (ADR 0009: the file is the input, the rows are the state), so the link is
+    /// the only trace back.
+    /// </summary>
+    Task LinkEntitiesAsync(
+        Guid blockId,
+        IReadOnlyList<BlockEntity> entities,
         CancellationToken cancellationToken = default);
 }

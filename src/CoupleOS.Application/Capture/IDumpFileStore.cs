@@ -48,4 +48,17 @@ public interface IDumpFileStore
         string content,
         int expectedVersion,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Stamps last_processed_at, and touches nothing else.
+    ///
+    /// Specifically not content_version: a Process changes no text, and bumping
+    /// the version would make the editor that just pressed the button stale
+    /// against its own run. Every subsequent Save would then warn about a
+    /// partner who had not written anything.
+    /// </summary>
+    Task MarkProcessedAsync(
+        Guid fileId,
+        DateTimeOffset processedAt,
+        CancellationToken cancellationToken = default);
 }

@@ -1,6 +1,7 @@
 using CoupleOS.Application.Capture;
 using CoupleOS.Application.Security;
 using CoupleOS.Domain.Entities;
+using Microsoft.EntityFrameworkCore;
 
 namespace CoupleOS.Infrastructure.Persistence;
 
@@ -42,6 +43,9 @@ public sealed class DumpRunStore(
 
         return run;
     }
+
+    public Task<DumpRun?> GetAsync(Guid runId, CancellationToken cancellationToken = default) =>
+        _dbContext.DumpRuns.FirstOrDefaultAsync(r => r.Id == runId, cancellationToken);
 
     public async Task FinishAsync(DumpRun run, CancellationToken cancellationToken = default)
     {

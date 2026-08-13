@@ -72,14 +72,10 @@ public sealed class IndexModel(
             return Partial("_ProcessResult", new ProcessResult(save, Report: null));
         }
 
-        // The surface is stated here, not inferred. This page IS shared.md, so
-        // everything captured through it is shared_couple (ADR 0009). The
-        // private thread will pass PrivateThread and share every other line of
-        // this pipeline.
-        var report = await _captureProcessor.ProcessAsync(
-            save.File.Content,
-            CaptureSurface.SharedFile,
-            cancellationToken);
+        // No text and no surface passed: the run reads the file it just wrote,
+        // and the visibility of everything it creates comes from the file rather
+        // than from this page's opinion of it (ADR 0009).
+        var report = await _captureProcessor.ProcessAsync(cancellationToken);
 
         return Partial("_ProcessResult", new ProcessResult(save, report));
     }

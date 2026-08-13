@@ -1,5 +1,6 @@
 using CoupleOS.Application.Capture;
 using CoupleOS.Domain.Entities;
+using CoupleOS.Domain.Enums;
 using Microsoft.EntityFrameworkCore;
 
 namespace CoupleOS.Infrastructure.Persistence;
@@ -72,5 +73,67 @@ public sealed class DumpBlockStore(CoupleOsDbContext dbContext) : IDumpBlockStor
         }
 
         return added;
+    }
+
+    /// <summary>
+    /// Ordered by line, so the report reads in the order the person wrote in.
+    /// AsNoTracking because these are handed to a processor that updates them
+    /// through raw SQL — a tracked copy would be a second source of truth for
+    /// the same row, and the stale one would be the one in memory.
+    /// </summary>
+    public async Task<IReadOnlyList<DumpBlock>> PendingAsync(
+        Guid dumpFileId,
+        CancellationToken cancellationToken = default) =>
+        await _dbContext.DumpBlocks
+            .AsNoTracking()
+            .Where(b => b.DumpFileId == dumpFileId && b.Status == DumpBlockStatus.Unprocessed)
+            .OrderBy(b => b.LineStart)
+            .ThenBy(b => b.Id)
+            .ToListAsync(cancellationToken);
+
+    /// <summary>
+    /// Raw SQL for the same reason AddNewAsync uses it: these rows were inserted
+    /// with ids generated here and never tracked, so there is no entity for
+    /// SaveChanges to update. Attaching one to issue an UPDATE would be a longer
+    /// way to write this statement, and a way to accidentally write columns the
+    /// run never touched.
+    /// </summary>
+    public async Task MarkAsync(DumpBlock block, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(block);
+
+        await _dbContext.Database.ExecuteSqlAsync(
+            $"""
+             UPDATE dump_blocks
+                SET status = {block.Status},
+                    error_message = {block.ErrorMessage},
+                    question = {block.Question},
+                    processed_at = {block.ProcessedAt}
+              WHERE id = {block.Id}
+             """,
+            cancellationToken);
+    }
+
+    public async Task LinkEntitiesAsync(
+        Guid blockId,
+        IReadOnlyList<BlockEntity> entities,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(entities);
+
+        foreach (var entity in entities)
+        {
+            // ON CONFLICT DO NOTHING against the composite primary key. The same
+            // block linking the same row twice with the same action is one fact
+            // stated twice, not two facts, and a run that is retried should not
+            // fail on its own previous success.
+            await _dbContext.Database.ExecuteSqlAsync(
+                $"""
+                 INSERT INTO dump_block_entities (block_id, entity_type, entity_id, action)
+                 VALUES ({blockId}, {entity.EntityType}, {entity.EntityId}, {entity.Action})
+                 ON CONFLICT DO NOTHING
+                 """,
+                cancellationToken);
+        }
     }
 }

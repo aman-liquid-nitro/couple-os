@@ -35,7 +35,32 @@ public sealed class DumpRun
     /// </summary>
     public int BlocksSeen { get; set; }
 
-    // blocks_processed, blocks_needing_input, blocks_failed, entities_created,
-    // entities_updated and report all default to 0 / null in the schema and are
-    // written by the run that produces them.
+    /// <summary>Blocks this run took to a terminal status, including ignored ones.</summary>
+    public int BlocksProcessed { get; set; }
+
+    public int BlocksNeedingInput { get; set; }
+
+    public int BlocksFailed { get; set; }
+
+    public int EntitiesCreated { get; set; }
+
+    /// <summary>
+    /// Zero until a tool updates something rather than creating it. Written now
+    /// rather than left unmapped because it is counted in the same loop as
+    /// entities_created, and a column that is only sometimes maintained is worse
+    /// than one that is honestly zero.
+    /// </summary>
+    public int EntitiesUpdated { get; set; }
+
+    /// <summary>
+    /// The change report as JSON, exactly as the user was shown it.
+    ///
+    /// Persisted because ADR 0009 makes the report the primary feedback
+    /// mechanism, and a report that lives only in an htmx swap is gone the moment
+    /// the tab closes — leaving SPEC.md 32's audit story able to explain single
+    /// tool calls but not the run that issued them. Stored as the rendered
+    /// account rather than recomputed later: what matters afterwards is what the
+    /// person actually read.
+    /// </summary>
+    public string? Report { get; set; }
 }

@@ -47,8 +47,30 @@ public sealed class DumpBlock
     /// <summary>The run that first saw this block.</summary>
     public Guid? RunId { get; set; }
 
-    // detected_intent, intent_confidence, question, answered_by_block_id,
-    // error_message, privacy_flagged and processed_at are columns nothing writes
-    // yet. They arrive with the run that fills them, one at a time, as everything
-    // else in this codebase has.
+    /// <summary>
+    /// Why this block is <see cref="DumpBlockStatus.Failed"/>, in the words the
+    /// report will show. Set together with the status and never on its own — a
+    /// failed block with no reason is the silence M2 exists to remove, moved one
+    /// level down.
+    /// </summary>
+    public string? ErrorMessage { get; set; }
+
+    /// <summary>
+    /// What the run needs answering before it can act, set with
+    /// <see cref="DumpBlockStatus.NeedsInput"/>. The schema's
+    /// dump_blocks_question_when_needs_input check refuses one without the other,
+    /// so the pair cannot drift apart.
+    /// </summary>
+    public string? Question { get; set; }
+
+    /// <summary>
+    /// When this block reached a terminal status. Null while unprocessed, and
+    /// null on a block whose run died mid-flight — which is the distinction worth
+    /// being able to make from the table.
+    /// </summary>
+    public DateTimeOffset? ProcessedAt { get; set; }
+
+    // detected_intent, intent_confidence, answered_by_block_id and privacy_flagged
+    // are columns nothing writes yet. They arrive with the run that fills them,
+    // one at a time, as everything else in this codebase has.
 }

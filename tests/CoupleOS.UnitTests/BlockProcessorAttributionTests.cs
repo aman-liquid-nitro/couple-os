@@ -1,10 +1,8 @@
-using System.Text.Json;
 using CoupleOS.Application.AI;
 using CoupleOS.Application.Capture;
-using CoupleOS.Application.Persistence;
-using CoupleOS.Application.Security;
-using CoupleOS.Application.Tools;
 using Xunit;
+
+using static CoupleOS.UnitTests.BlockProcessorFakes;
 
 namespace CoupleOS.UnitTests;
 
@@ -18,84 +16,30 @@ namespace CoupleOS.UnitTests;
 /// figure, quietly, with every row individually looking correct. These tests fix
 /// the alternative: the counts land exactly once per completion.
 ///
-/// No database and no model here. CaptureProcessor was built to be testable
-/// against fakes and had no unit tests at all (STATUS debt 10); this is the first
-/// of them.
+/// The rule now lives in BlockProcessor because a completion is now one block's
+/// worth rather than one file's. That makes the property more important, not
+/// less: a twenty-line dump is twenty completions, and getting this wrong would
+/// overcount a run by more than it used to overcount a note.
 /// </summary>
-public sealed class CaptureProcessorAttributionTests
+public sealed class BlockProcessorAttributionTests
 {
-    private static readonly Guid Couple = Guid.Parse("c1111111-1111-1111-1111-111111111111");
-    private static readonly Guid User = Guid.Parse("11111111-1111-1111-1111-111111111111");
-
-    private sealed class StubProvider(LlmCompletion completion) : ILlmProvider
-    {
-        public string Name => "stub";
-
-        public Task<LlmCompletion> CompleteAsync(LlmRequest request, CancellationToken cancellationToken = default) =>
-            Task.FromResult(completion);
-    }
-
-    private sealed class EmptyRegistry : IToolRegistry
-    {
-        public IReadOnlyList<ITool> All => [];
-
-        public ITool? Find(string name) => null;
-    }
-
-    /// <summary>Records the context of every dispatch, which is what carries the attribution.</summary>
-    private sealed class CapturingDispatcher : IToolDispatcher
-    {
-        public List<ToolExecutionContext> Contexts { get; } = [];
-
-        public Task<ToolResult> DispatchAsync(
-            LlmToolCall call,
-            ToolExecutionContext context,
-            CancellationToken cancellationToken = default)
-        {
-            Contexts.Add(context);
-
-            return Task.FromResult(new ToolResult(call.Name, ToolOutcome.Success, "shopping_item", Guid.CreateVersion7()));
-        }
-    }
-
-    private sealed class NoopTransaction : ICoupleTransaction
-    {
-        public Task CommitAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
-
-        public ValueTask DisposeAsync() => ValueTask.CompletedTask;
-    }
-
-    private sealed class NoopUnitOfWork : IScopedUnitOfWork
-    {
-        public Task<ICoupleTransaction> BeginAsync(CancellationToken cancellationToken = default) =>
-            Task.FromResult<ICoupleTransaction>(new NoopTransaction());
-    }
-
-    private sealed class FixedScope : ICoupleScopeAccessor
-    {
-        public bool HasScope => true;
-
-        public ICoupleScope Current => new CoupleScope(Couple, User);
-    }
-
-    private static LlmToolCall Call(string name) =>
-        new(name, JsonDocument.Parse($$"""{"name":"{{name}}-arg"}""").RootElement.Clone());
-
-    private static (CaptureProcessor Processor, CapturingDispatcher Dispatcher) Build(int toolCalls)
+    private static (BlockProcessor Processor, CapturingDispatcher Dispatcher) Build(int toolCalls)
     {
         var completion = new LlmCompletion(
             [.. Enumerable.Range(0, toolCalls).Select(i => Call($"create_shopping_item{i}"))],
             Content: null,
-            Usage: new LlmUsage("ollama-cloud", "gemma4:31b", PromptTokens: 660, CompletionTokens: 42, Duration: TimeSpan.FromSeconds(2)));
+            Usage: Usage());
 
         var dispatcher = new CapturingDispatcher();
 
-        var processor = new CaptureProcessor(
+        var processor = new BlockProcessor(
             new StubProvider(completion),
             new EmptyRegistry(),
             dispatcher,
-            new NoopUnitOfWork(),
-            new FixedScope());
+            new RecordingBlockStore(),
+            new CountingUnitOfWork(),
+            new FixedScope(),
+            TimeProvider.System);
 
         return (processor, dispatcher);
     }
@@ -105,7 +49,7 @@ public sealed class CaptureProcessorAttributionTests
     {
         var (processor, dispatcher) = Build(toolCalls: 3);
 
-        await processor.ProcessAsync("we need detergent, coffee and rice", CaptureSurface.SharedFile);
+        await processor.ProcessAsync(Block("we need detergent, coffee and rice"));
 
         Assert.Equal(3, dispatcher.Contexts.Count);
 
@@ -126,7 +70,7 @@ public sealed class CaptureProcessorAttributionTests
         // look right on its own.
         var (processor, dispatcher) = Build(toolCalls: 3);
 
-        await processor.ProcessAsync("we need detergent, coffee and rice", CaptureSurface.SharedFile);
+        await processor.ProcessAsync(Block("we need detergent, coffee and rice"));
 
         var prompt = dispatcher.Contexts.Sum(c => c.Attribution?.PromptTokens ?? 0);
         var completion = dispatcher.Contexts.Sum(c => c.Attribution?.CompletionTokens ?? 0);
@@ -144,7 +88,7 @@ public sealed class CaptureProcessorAttributionTests
         // that call is the first one and must carry the counts.
         var (processor, dispatcher) = Build(toolCalls: 1);
 
-        await processor.ProcessAsync("we need detergent", CaptureSurface.SharedFile);
+        await processor.ProcessAsync(Block("we need detergent"));
 
         var only = Assert.Single(dispatcher.Contexts);
         Assert.Equal(660, only.Attribution?.PromptTokens);
@@ -159,7 +103,7 @@ public sealed class CaptureProcessorAttributionTests
         // can read the row (ADR 0005) or which surface it came from (ADR 0009).
         var (processor, dispatcher) = Build(toolCalls: 2);
 
-        await processor.ProcessAsync("we need detergent and coffee", CaptureSurface.SharedFile);
+        await processor.ProcessAsync(Block("we need detergent and coffee"));
 
         foreach (var context in dispatcher.Contexts)
         {
