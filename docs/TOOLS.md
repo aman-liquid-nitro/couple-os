@@ -260,6 +260,28 @@ resolver that cannot parse the expression must fail the call rather than pick a
 date. `request_clarification` covers the case where the note genuinely has no
 time in it; "saturday 8pm" is not that case (see 2a).
 
+> **Built.** Two arguments are translated rather than stored. `recurrence` becomes
+> an RFC 5545 rule in application code — a model asked for `FREQ=YEARLY` directly
+> will eventually emit a rule a calendar library refuses, and nothing in the
+> pipeline would notice. `all_day` discards the resolver's assumed 9am and stores
+> **local** midnight, which is not midnight in UTC: an all-day event written from
+> Asia/Kolkata is `18:30Z` on the previous day, and a row that lost the offset
+> would show a birthday arriving a day early. The year is still stated, because
+> that is this section's own requirement.
+>
+> `all_day: true` alongside a time the person actually gave is a contradiction, and
+> the person's words win: the flag is dropped and the change report says so. The
+> reverse — honouring the flag — would silently discard the only part of the note
+> that was unambiguous.
+>
+> `end_expression` is resolved **relative to the start**, because "until 11"
+> carries a time and no date and the date it means is the day the event begins on.
+> A bare hour is read as written by the resolver and the 12-hour reading is made
+> here, where the start time exists to compare against: "8pm until 11" becomes
+> 11pm and says so. An end that is stated in full and still precedes the start —
+> "8pm until 7pm" — is refused rather than corrected; `events_end_after_start`
+> would refuse it at the database and take the whole block with it.
+
 ---
 
 ### 6. `create_memory`

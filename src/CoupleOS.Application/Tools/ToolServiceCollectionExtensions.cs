@@ -22,6 +22,10 @@ public static class ToolServiceCollectionExtensions
         services.AddScoped<ITool, CreateTaskTool>();
         services.AddScoped<ITool, CreateReminderTool>();
 
+        // The tool whose absence produced M2's founding defect: the dinner line in
+        // the first real run had nothing to call, so it vanished from the report.
+        services.AddScoped<ITool, CreateEventTool>();
+
         // Registered alongside the writing tools rather than treated as part of
         // the pipeline, because to the model it is one of the options and that is
         // exactly the point: declining has to be as reachable as acting, or the

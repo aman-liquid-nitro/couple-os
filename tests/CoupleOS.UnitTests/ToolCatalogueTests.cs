@@ -42,6 +42,7 @@ public sealed class ToolCatalogueTests
 
         services.AddScoped<IShoppingItemWriter>(_ => new NoOpShoppingItemWriter());
         services.AddScoped<ITaskWriter>(_ => new RecordingTaskWriter());
+        services.AddScoped<IEventWriter>(_ => new NoOpEventWriter());
         services.AddScoped<CoupleOS.Application.Time.ICoupleClock>(_ => new FixedCoupleClock());
         services.AddScoped<IPartnerLookup>(_ => new StubPartnerLookup(Guid.NewGuid()));
 
@@ -108,6 +109,13 @@ public sealed class ToolCatalogueTests
         schema.ValueKind == JsonValueKind.Object && schema.TryGetProperty("properties", out var properties)
             ? [.. properties.EnumerateObject().Select(p => p.Name)]
             : [];
+
+    private sealed class NoOpEventWriter : IEventWriter
+    {
+        public Task AddAsync(
+            CoupleOS.Domain.Entities.CalendarEvent calendarEvent,
+            CancellationToken cancellationToken = default) => Task.CompletedTask;
+    }
 
     private sealed class NoOpShoppingItemWriter : IShoppingItemWriter
     {

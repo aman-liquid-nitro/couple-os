@@ -445,6 +445,25 @@ public static class DateExpressionResolver
                     0));
         }
 
+        // A bare hour, and only where a preposition marks it as one: "at 9",
+        // "until 11". The preposition is what keeps "in 3 days" from being read as
+        // three o'clock and "the 14th" from becoming two in the afternoon, which is
+        // why an unmarked number is left to the date patterns.
+        //
+        // This case was described in this comment before it was implemented: the
+        // paragraph above claimed a bare 1–11 was "read as written", and no pattern
+        // did it, so "party saturday 8pm until 11" failed as unreadable. Found by
+        // create_event, which is the caller the last sentence was written for.
+        if (Match(text, @"\b(?:at|until|till|by|from)\s+(?<h>\d{1,2})(?!\s*[:\d])\b") is { } bare)
+        {
+            var hour = int.Parse(bare.Groups["h"].Value, CultureInfo.InvariantCulture);
+
+            if (hour <= 23)
+            {
+                return (Strip(text, bare), new TimeSpan(hour, 0, 0));
+            }
+        }
+
         if (Match(text, @"\bnoon\b") is { } noon)
         {
             return (Strip(text, noon), new TimeSpan(12, 0, 0));

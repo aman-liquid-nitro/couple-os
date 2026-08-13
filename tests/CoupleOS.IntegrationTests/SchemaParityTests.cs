@@ -35,6 +35,11 @@ public sealed class SchemaParityTests : IClassFixture<RlsFixture>
             // missing one.
             "tasks",
 
+            // events.starts_at is NOT NULL with no default, which is the column
+            // this check exists for: unmapped, every insert would fail at the
+            // moment somebody first writes down a dinner.
+            "events",
+
             // M1 identity. All five are inserted into during sign-in and
             // invitation, so every NOT NULL column without a default must be
             // mapped — the failure otherwise is a constraint violation at the

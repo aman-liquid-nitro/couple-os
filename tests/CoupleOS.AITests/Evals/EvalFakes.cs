@@ -19,6 +19,12 @@ public sealed class NullTaskWriter : ITaskWriter
     public Task AddAsync(TaskItem task, CancellationToken cancellationToken = default) => Task.CompletedTask;
 }
 
+public sealed class NullEventWriter : IEventWriter
+{
+    public Task AddAsync(CalendarEvent calendarEvent, CancellationToken cancellationToken = default) =>
+        Task.CompletedTask;
+}
+
 /// <summary>
 /// A couple of two, so a commitment resolves. The identity of the partner is not
 /// what any eval case measures — that it exists is, because a one-member couple

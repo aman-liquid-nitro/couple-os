@@ -64,6 +64,7 @@ public static class InfrastructureServiceCollectionExtensions
 
         services.AddScoped<IShoppingItemWriter, ShoppingItemWriter>();
         services.AddScoped<ITaskWriter, TaskWriter>();
+        services.AddScoped<IEventWriter, EventWriter>();
 
         // On IdentityDbContext, because couple_members has no row-level security.
         // Same seam as the clock below, and the same reason.

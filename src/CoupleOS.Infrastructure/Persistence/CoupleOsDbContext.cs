@@ -15,6 +15,9 @@ public sealed class CoupleOsDbContext(DbContextOptions<CoupleOsDbContext> option
     /// <see cref="TaskItem"/> for the reason recorded there.
     /// </summary>
     public DbSet<TaskItem> Tasks => Set<TaskItem>();
+    /// <summary>The calendar. One entity, named CalendarEvent because `event` is a keyword.</summary>
+    public DbSet<CalendarEvent> Events => Set<CalendarEvent>();
+
     public DbSet<AiAction> AiActions => Set<AiAction>();
     public DbSet<DumpFile> DumpFiles => Set<DumpFile>();
     public DbSet<DumpRun> DumpRuns => Set<DumpRun>();
@@ -72,6 +75,24 @@ public sealed class CoupleOsDbContext(DbContextOptions<CoupleOsDbContext> option
             // database defaults, as shopping_items does. status is the one worth
             // naming: every task starts 'todo', and mapping the column would let
             // a future entity default disagree with the schema about that.
+        });
+
+        b.Entity<CalendarEvent>(e =>
+        {
+            e.ToTable("events");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Id).HasColumnName("id");
+            e.Property(x => x.CoupleId).HasColumnName("couple_id");
+            e.Property(x => x.OwnerUserId).HasColumnName("owner_user_id");
+            e.Property(x => x.Visibility).HasColumnName("visibility");
+            e.Property(x => x.Title).HasColumnName("title");
+            e.Property(x => x.Description).HasColumnName("description");
+            e.Property(x => x.StartsAt).HasColumnName("starts_at");
+            e.Property(x => x.EndsAt).HasColumnName("ends_at");
+            e.Property(x => x.AllDay).HasColumnName("all_day");
+            e.Property(x => x.Location).HasColumnName("location");
+            e.Property(x => x.RecurrenceRule).HasColumnName("recurrence_rule");
+            e.Property(x => x.Category).HasColumnName("category");
         });
 
         b.Entity<AiAction>(e =>

@@ -1,3 +1,4 @@
+using System.Globalization;
 using CoupleOS.Application.Time;
 
 namespace CoupleOS.Application.Tools;
@@ -23,8 +24,36 @@ namespace CoupleOS.Application.Tools;
 /// TOOLS.md is explicit that a resolver which cannot parse must fail rather than
 /// pick a date.
 /// </param>
-public sealed record ToolDate(DateTimeOffset? Instant, string? Note = null, string? Failure = null)
+/// <param name="HasExplicitTime">
+/// False when the expression carried a date and no time, so the hour in
+/// <paramref name="Instant"/> is this layer's assumption rather than the person's.
+/// Only a caller that treats the two differently needs it — an all-day event
+/// stores the date and ignores the hour, where a reminder at the assumed hour is
+/// the whole point.
+/// </param>
+/// <param name="Local">
+/// The same instant in the couple's own zone.
+///
+/// Carried rather than left to the caller, because converting it back means
+/// fetching the zone again and doing that with the *server's* zone is the bug this
+/// record exists to prevent. Two callers need it and neither could get it right on
+/// its own: <c>expenses.occurred_on</c> is a <c>date</c>, and 11pm in Kolkata is
+/// the previous day in UTC; an all-day event stores local midnight, which is not
+/// midnight anywhere else.
+/// </param>
+public sealed record ToolDate(
+    DateTimeOffset? Instant,
+    string? Note = null,
+    string? Failure = null,
+    bool HasExplicitTime = false,
+    DateTimeOffset? Local = null)
 {
+    /// <summary>The resolved day where the couple is. What a <c>date</c> column takes.</summary>
+    public DateOnly? LocalDate => Local is { } local ? DateOnly.FromDateTime(local.DateTime) : null;
+
+    /// <summary>The hour of day where the couple is, or null when nothing resolved.</summary>
+    public int? LocalHour => Local?.Hour;
+
     /// <summary>Nothing was given, which is only a problem for the tools that require one.</summary>
     /// <remarks>
     /// The cast is load-bearing: a record's compiler-generated copy constructor
@@ -47,10 +76,16 @@ public sealed record ToolDate(DateTimeOffset? Instant, string? Note = null, stri
     /// failing the whole line over an empty string would lose a note that was
     /// otherwise fine.
     /// </summary>
+    /// <param name="relativeTo">
+    /// An instant this expression continues from, for the end of a range. "until
+    /// 11" carries a time and no date, and the date it means is the one the event
+    /// starts on — so the caller with both halves passes the first in.
+    /// </param>
     public static async Task<ToolDate> ResolveAsync(
         ICoupleClock clock,
         string? expression,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        DateTimeOffset? relativeTo = null)
     {
         ArgumentNullException.ThrowIfNull(clock);
 
@@ -60,7 +95,7 @@ public sealed record ToolDate(DateTimeOffset? Instant, string? Note = null, stri
         }
 
         var now = await clock.NowAsync(cancellationToken);
-        var resolution = DateExpressionResolver.Resolve(expression, now.Now, now.Zone);
+        var resolution = DateExpressionResolver.Resolve(expression, now.Now, now.Zone, relativeTo);
 
         if (!resolution.Resolved)
         {
@@ -76,7 +111,14 @@ public sealed record ToolDate(DateTimeOffset? Instant, string? Note = null, stri
         // a puzzling message; the same instant, normalised here, is the value every
         // tool writes. The zone is not lost — it is what the note below is built
         // from, and what the column is read back into.
-        return new ToolDate(resolution.Instant!.Value.ToUniversalTime(), Describe(expression, resolution, now));
+        var local = TimeZoneInfo.ConvertTime(resolution.Instant!.Value, now.Zone);
+
+        return new ToolDate(
+            resolution.Instant.Value.ToUniversalTime(),
+            Describe(expression, resolution, now),
+            Failure: null,
+            HasExplicitTime: resolution.HasExplicitTime,
+            Local: local);
     }
 
     /// <summary>
@@ -97,7 +139,13 @@ public sealed record ToolDate(DateTimeOffset? Instant, string? Note = null, stri
 
         var local = TimeZoneInfo.ConvertTime(resolution.Instant!.Value, now.Zone);
 
-        var note = $"\"{expression.Trim()}\" read as {local:ddd d MMM yyyy, HH:mm}";
+        // Invariant, like the resolver's own assumptions. The server's culture
+        // decides how a month is abbreviated — en-IN writes "Sept", en-US writes
+        // "Sep" — and a sentence that changes with the host's locale is one a test
+        // can only pin by accident. Found exactly that way.
+        var note = string.Create(
+            CultureInfo.InvariantCulture,
+            $"\"{expression.Trim()}\" read as {local:ddd d MMM yyyy, HH:mm}");
 
         if (resolution.Assumption is { } assumption)
         {
