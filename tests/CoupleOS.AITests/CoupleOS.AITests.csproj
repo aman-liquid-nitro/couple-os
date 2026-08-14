@@ -16,6 +16,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\CoupleOS.Evals\CoupleOS.Evals.csproj" />
     <ProjectReference Include="..\..\src\CoupleOS.AI\CoupleOS.AI.csproj" />
     <ProjectReference Include="..\..\src\CoupleOS.Application\CoupleOS.Application.csproj" />
   </ItemGroup>

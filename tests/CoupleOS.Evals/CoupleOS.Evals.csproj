@@ -1,0 +1,21 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Not a test project: it holds no [Fact] and runs no case. It is the eval
+       set's *model* — how a case is read, which harness owns which assertion,
+       and what the gate does with the results — shared by three harnesses in
+       three test projects and by the gate tool that judges their output.
+
+       A copy per project was the alternative, and it is the alternative this
+       repository has already rejected twice (BlockSegmenter.RoleOf, ToolSummary):
+       two implementations of one rule are two chances to disagree, and here the
+       rule is "which assertions is anybody actually making". -->
+
+  <PropertyGroup>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\CoupleOS.Application\CoupleOS.Application.csproj" />
+  </ItemGroup>
+
+</Project>

@@ -16,6 +16,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\CoupleOS.Evals\CoupleOS.Evals.csproj" />
     <ProjectReference Include="..\..\src\CoupleOS.Application\CoupleOS.Application.csproj" />
     <ProjectReference Include="..\..\src\CoupleOS.Domain\CoupleOS.Domain.csproj" />
     <ProjectReference Include="..\..\src\CoupleOS.Infrastructure\CoupleOS.Infrastructure.csproj" />
