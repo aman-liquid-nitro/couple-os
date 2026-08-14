@@ -235,6 +235,7 @@ public sealed class CoupleOsDbContext(DbContextOptions<CoupleOsDbContext> option
             e.Property(x => x.ToolName).HasColumnName("tool_name");
             e.Property(x => x.Arguments).HasColumnName("arguments").HasColumnType("jsonb");
             e.Property(x => x.Outcome).HasColumnName("outcome");
+            e.Property(x => x.Result).HasColumnName("result").HasColumnType("jsonb");
             e.Property(x => x.IdempotencyKey).HasColumnName("idempotency_key");
             e.Property(x => x.EntityType).HasColumnName("entity_type");
             e.Property(x => x.EntityId).HasColumnName("entity_id");

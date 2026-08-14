@@ -1,4 +1,6 @@
 using System.Diagnostics;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using CoupleOS.Application.AI;
 
 namespace CoupleOS.Application.Tools;
@@ -37,9 +39,36 @@ public sealed class AuditingToolDispatcher(IToolDispatcher inner, IToolAuditSink
                 EntityType = result.EntityType,
                 EntityId = result.EntityId,
                 Error = result.Errors is { Count: > 0 } errors ? string.Join("; ", errors) : null,
+                Result = ToResultJson(result),
             },
             cancellationToken);
 
         return result;
     }
+
+    /// <summary>
+    /// The three things a call can report beyond the row it wrote: the note on a
+    /// completed value, the question it asked instead, and the answer it found.
+    ///
+    /// Null when there are none, rather than <c>{}</c>: an empty object in
+    /// `result` reads as "the tool returned nothing", which is a claim, where a
+    /// null reads as "there was nothing to return". The errors are not repeated
+    /// here — they have their own column.
+    /// </summary>
+    private static string? ToResultJson(ToolResult result)
+    {
+        if (result.Note is null && result.Question is null && result.Answer is null)
+        {
+            return null;
+        }
+
+        return JsonSerializer.Serialize(
+            new AuditedToolResult(result.Note, result.Question, result.Answer),
+            AuditJson);
+    }
+
+    private static readonly JsonSerializerOptions AuditJson =
+        new() { DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull };
+
+    private sealed record AuditedToolResult(string? Note, string? Question, string? Answer);
 }

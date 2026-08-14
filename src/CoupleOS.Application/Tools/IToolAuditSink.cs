@@ -18,6 +18,12 @@ public sealed record ToolAuditEntry
     public string? EntityType { get; init; }
     public Guid? EntityId { get; init; }
     public string? Error { get; init; }
+
+    /// <summary>
+    /// What the tool reported back, as a JSON object, or null when it reported
+    /// nothing but the row it wrote. Lands in <c>ai_actions.result</c>.
+    /// </summary>
+    public string? Result { get; init; }
 }
 
 /// <summary>

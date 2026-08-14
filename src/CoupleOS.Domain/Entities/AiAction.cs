@@ -20,6 +20,24 @@ public sealed class AiAction
 
     public required ActionOutcome Outcome { get; init; }
 
+    /// <summary>
+    /// What the tool reported back, as jsonb. Null when it reported nothing but
+    /// the row it wrote.
+    ///
+    /// `Arguments` is the input and `Outcome` is the outcome; without this,
+    /// V0_SCOPE's "input, output and outcome" was two of three, and
+    /// `entity_id` is a pointer rather than a record — it says *which* shopping
+    /// item, not what the tool said about it, and it is null for the two tools
+    /// that create nothing (`search_memory`, `request_clarification`).
+    ///
+    /// This can carry the couple's own text into a second table. It is safe
+    /// here and would not be everywhere: the `couple_scope` policy on
+    /// `ai_actions` is `couple_id = app_current_couple() AND user_id =
+    /// app_current_user()`, so a row is readable only by the person whose call
+    /// it was — a private answer cannot reach the partner through it.
+    /// </summary>
+    public string? Result { get; init; }
+
     public string? IdempotencyKey { get; init; }
     public string? EntityType { get; init; }
     public Guid? EntityId { get; init; }

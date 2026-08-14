@@ -229,6 +229,12 @@ public sealed class MemoryToolPipelineTests : IClassFixture<RlsFixture>
         Assert.Equal(ActionOutcome.Success, audit.Outcome);
         Assert.Null(audit.EntityId);
 
+        // And the output, which is the whole of what this call produced. With no
+        // entity to point at, `result` is the only column that can say what the
+        // couple was told (STATUS debt 48).
+        Assert.NotNull(audit.Result);
+        Assert.Contains(word, audit.Result);
+
         await transaction.CommitAsync();
     }
 

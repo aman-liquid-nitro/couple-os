@@ -21,6 +21,7 @@ public sealed class AiActionAuditSink(CoupleOsDbContext dbContext) : IToolAuditS
             ToolName = entry.ToolName,
             Arguments = entry.Arguments.GetRawText(),
             Outcome = ToActionOutcome(entry.Outcome),
+            Result = entry.Result,
             IdempotencyKey = entry.Context.IdempotencyKey,
             EntityType = entry.EntityType,
             EntityId = entry.EntityId,
