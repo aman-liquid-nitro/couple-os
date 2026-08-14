@@ -1,4 +1,7 @@
+using System.Text.Json;
+using CoupleOS.Application.Attachments;
 using CoupleOS.Application.Capture;
+using CoupleOS.Domain.Enums;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 
@@ -21,13 +24,17 @@ public sealed record ProcessResult(SharedFileSave Save, CaptureReport? Report, S
 
 public sealed class IndexModel(
     ISharedFileEditor sharedFile,
-    ICaptureProcessor captureProcessor) : PageModel
+    ICaptureProcessor captureProcessor,
+    IAttachmentIntake attachments) : PageModel
 {
     private readonly ISharedFileEditor _sharedFile = sharedFile
         ?? throw new ArgumentNullException(nameof(sharedFile));
 
     private readonly ICaptureProcessor _captureProcessor = captureProcessor
         ?? throw new ArgumentNullException(nameof(captureProcessor));
+
+    private readonly IAttachmentIntake _attachments = attachments
+        ?? throw new ArgumentNullException(nameof(attachments));
 
     /// <summary>
     /// The editor's text. Named Text rather than Content because PageModel
@@ -82,6 +89,60 @@ public sealed class IndexModel(
         // nothing needs swapping — and re-reading the file to say so would be a
         // query per stray keypress on the Enter key.
         return file is null ? new EmptyResult() : Partial("_QuickAddResult", file);
+    }
+
+    /// <summary>
+    /// Takes the file and hands back the link, and deliberately does not touch
+    /// the couple's text.
+    ///
+    /// The obvious implementation appends the markdown to the file the way
+    /// quick-add does, and it is wrong for the same reason quick-add is right:
+    /// quick-add is a whole thought, and a receipt is evidence for a line
+    /// somebody is in the middle of writing. Appending it would put the link at
+    /// the end of the document, in a block of its own, which produces no tool
+    /// call and therefore links to nothing (V0_SCOPE.md wants it linked to
+    /// "whatever records the surrounding block produced"). So the markdown goes
+    /// back to the browser, which knows where the caret is.
+    ///
+    /// Nothing is saved here either. The textarea is unsaved-by-nature between
+    /// keystrokes, and a save from this handler would write text the person is
+    /// still typing at a version they are still holding.
+    /// </summary>
+    public async Task<IActionResult> OnPostUploadAsync(IFormFile? upload, CancellationToken cancellationToken)
+    {
+        if (upload is null || upload.Length == 0)
+        {
+            return Partial("_UploadResult", AttachmentUpload.Refused("No file arrived."));
+        }
+
+        await using var content = upload.OpenReadStream();
+
+        // Shared, because this is the shared file. Never from the file's name or
+        // its contents — ADR 0009 makes the surface the thing that decides, and a
+        // receipt for a surprise uploaded here is shared because the person chose
+        // this page, which is the same rule that keeps the system from relocating
+        // their words.
+        var result = await _attachments.ReceiveAsync(
+            upload.FileName,
+            upload.ContentType,
+            content,
+            Visibility.SharedCouple,
+            dumpFileId: null,
+            cancellationToken);
+
+        if (result.Accepted)
+        {
+            // Handed to the page as an event rather than as markup. A <script>
+            // swapped into the DOM runs once and stays there, so after four
+            // uploads four of them are waiting to run again.
+            Response.Headers["HX-Trigger-After-Swap"] = JsonSerializer.Serialize(
+                new Dictionary<string, object>
+                {
+                    ["coupleos:attached"] = new { markdown = result.Markdown },
+                });
+        }
+
+        return Partial("_UploadResult", result);
     }
 
     public async Task<IActionResult> OnPostProcessAsync(CancellationToken cancellationToken)

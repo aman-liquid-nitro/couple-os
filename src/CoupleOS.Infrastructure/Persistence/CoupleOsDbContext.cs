@@ -29,6 +29,8 @@ public sealed class CoupleOsDbContext(DbContextOptions<CoupleOsDbContext> option
     public DbSet<DumpBlock> DumpBlocks => Set<DumpBlock>();
     public DbSet<ConversationSession> ConversationSessions => Set<ConversationSession>();
     public DbSet<ConversationMessage> ConversationMessages => Set<ConversationMessage>();
+    public DbSet<Attachment> Attachments => Set<Attachment>();
+    public DbSet<AttachmentLink> AttachmentLinks => Set<AttachmentLink>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -91,6 +93,7 @@ public sealed class CoupleOsDbContext(DbContextOptions<CoupleOsDbContext> option
             e.Property(x => x.NormalizedName).HasColumnName("normalized_name");
             e.Property(x => x.Quantity).HasColumnName("quantity");
             e.Property(x => x.AddedBy).HasColumnName("added_by");
+            e.Property(x => x.CreatedAt).HasColumnName("created_at").ValueGeneratedOnAdd();
 
             // status, recurring, created_at and the rest keep their database
             // defaults. Mapping a column just to restate its default invites the
@@ -116,11 +119,53 @@ public sealed class CoupleOsDbContext(DbContextOptions<CoupleOsDbContext> option
             // defaults to 'chat', so every task typed into shared.md claimed the
             // provenance of a conversation.
             e.Property(x => x.Source).HasColumnName("source");
+            e.Property(x => x.CreatedAt).HasColumnName("created_at").ValueGeneratedOnAdd();
 
-            // status, created_at, updated_at and the rest keep their database
-            // defaults, as shopping_items does. status is the one worth naming:
-            // every task starts 'todo', and mapping the column would let a future
-            // entity default disagree with the schema about that.
+            // status, updated_at and the rest keep their database defaults.
+            // status is the one worth naming: every task starts 'todo', and
+            // mapping the column would let a future entity default disagree with
+            // the schema about that.
+        });
+
+        b.Entity<Attachment>(e =>
+        {
+            e.ToTable("attachments");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Id).HasColumnName("id");
+            e.Property(x => x.CoupleId).HasColumnName("couple_id");
+            e.Property(x => x.OwnerUserId).HasColumnName("owner_user_id");
+            e.Property(x => x.Visibility).HasColumnName("visibility");
+            e.Property(x => x.DumpFileId).HasColumnName("dump_file_id");
+            e.Property(x => x.Filename).HasColumnName("filename");
+            e.Property(x => x.MimeType).HasColumnName("mime_type");
+            e.Property(x => x.ByteSize).HasColumnName("byte_size");
+            e.Property(x => x.StorageKey).HasColumnName("storage_key");
+            e.Property(x => x.Checksum).HasColumnName("checksum");
+            e.Property(x => x.UploadedBy).HasColumnName("uploaded_by");
+            e.Property(x => x.CreatedAt).HasColumnName("created_at").ValueGeneratedOnAdd();
+            e.Property(x => x.DeletedAt).HasColumnName("deleted_at");
+
+            // ocr_status and ocr_text are left unmapped on purpose. V0 does not
+            // read images, and an unmapped column cannot be set by accident — a
+            // row claiming OCR was attempted would be SPEC.md 46's failure with a
+            // database column behind it (ADR 0014).
+        });
+
+        b.Entity<AttachmentLink>(e =>
+        {
+            e.ToTable("attachment_links");
+            e.HasKey(x => new { x.AttachmentId, x.EntityType, x.EntityId });
+            e.Property(x => x.AttachmentId).HasColumnName("attachment_id");
+            e.Property(x => x.EntityType).HasColumnName("entity_type");
+            e.Property(x => x.EntityId).HasColumnName("entity_id");
+
+            // Declared so EF orders the INSERTs, which is the third time this has
+            // bitten (couple_members before couples, conversation_messages,
+            // memories superseding themselves): EF orders writes by the
+            // relationships in the model, so a foreign key the model does not know
+            // about is a foreign key EF will violate. No navigation property is
+            // needed, or wanted.
+            e.HasOne<Attachment>().WithMany().HasForeignKey(x => x.AttachmentId);
         });
 
         b.Entity<CalendarEvent>(e =>
@@ -140,6 +185,7 @@ public sealed class CoupleOsDbContext(DbContextOptions<CoupleOsDbContext> option
             e.Property(x => x.RecurrenceRule).HasColumnName("recurrence_rule");
             e.Property(x => x.Category).HasColumnName("category");
             e.Property(x => x.Source).HasColumnName("source");
+            e.Property(x => x.CreatedAt).HasColumnName("created_at").ValueGeneratedOnAdd();
         });
 
         b.Entity<Expense>(e =>
@@ -163,6 +209,7 @@ public sealed class CoupleOsDbContext(DbContextOptions<CoupleOsDbContext> option
             e.Property(x => x.PaidBy).HasColumnName("paid_by");
             e.Property(x => x.IsShared).HasColumnName("is_shared");
             e.Property(x => x.Source).HasColumnName("source");
+            e.Property(x => x.CreatedAt).HasColumnName("created_at").ValueGeneratedOnAdd();
 
             // A date, not a timestamp. Writing a timestamptz here would be silently
             // truncated by PostgreSQL and the truncation would use UTC.

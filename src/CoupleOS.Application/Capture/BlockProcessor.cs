@@ -1,4 +1,5 @@
 using CoupleOS.Application.AI;
+using CoupleOS.Application.Attachments;
 using CoupleOS.Application.Persistence;
 using CoupleOS.Application.Security;
 using CoupleOS.Application.Tools;
@@ -27,10 +28,13 @@ public sealed class BlockProcessor(
     IToolRegistry toolRegistry,
     IToolDispatcher toolDispatcher,
     IDumpBlockStore blocks,
+    IAttachments attachments,
     IScopedUnitOfWork unitOfWork,
     ICoupleScopeAccessor scopeAccessor,
     TimeProvider clock) : IBlockProcessor
 {
+    private readonly IAttachments _attachments = attachments ?? throw new ArgumentNullException(nameof(attachments));
+
     private readonly ILlmProvider _llmProvider = llmProvider ?? throw new ArgumentNullException(nameof(llmProvider));
     private readonly IToolRegistry _toolRegistry = toolRegistry ?? throw new ArgumentNullException(nameof(toolRegistry));
     private readonly IToolDispatcher _toolDispatcher = toolDispatcher ?? throw new ArgumentNullException(nameof(toolDispatcher));
@@ -207,6 +211,21 @@ public sealed class BlockProcessor(
         await _blocks.MarkAsync(block, cancellationToken);
         await _blocks.LinkEntitiesAsync(block.Id, entities, cancellationToken);
 
+        // V0_SCOPE.md: an attachment links to "whatever records the surrounding
+        // block produced". Which records those are is only known here, and only
+        // now — the person uploading a receipt does not yet know it will become an
+        // expense, and by the time the expense exists the upload is minutes old.
+        // So the link is made from the block's own text, at the moment the block
+        // settles, inside the transaction that created the rows it points at.
+        //
+        // Every attachment against every entity, rather than a guess at which
+        // receipt goes with which row. A block is one thought; if it produced an
+        // expense and a task, a receipt in it is evidence for both, and picking
+        // one would be the system inferring meaning from a sentence — which is the
+        // thing ADR 0009 refuses to do about privacy and there is no reason to
+        // start here.
+        await LinkAttachmentsAsync(block, entities, cancellationToken);
+
         // The rows, their audit entries, the block's status and the links between
         // them commit together. A report citing a row that was rolled back would
         // be worse than no report.
@@ -216,6 +235,39 @@ public sealed class BlockProcessor(
         {
             Usage = completion.Usage,
         };
+    }
+
+    private async Task LinkAttachmentsAsync(
+        DumpBlock block,
+        IReadOnlyList<BlockEntity> entities,
+        CancellationToken cancellationToken)
+    {
+        if (entities.Count == 0)
+        {
+            return;
+        }
+
+        var referenced = AttachmentReference.In(block.RawText);
+
+        if (referenced.Count == 0)
+        {
+            return;
+        }
+
+        var targets = entities
+            .Select(e => new AttachmentTarget(e.EntityType, e.EntityId))
+            .ToList();
+
+        foreach (var attachmentId in referenced)
+        {
+            // A link to an attachment this caller cannot see writes nothing:
+            // attachment_links' policy is an EXISTS against the attachment, so the
+            // INSERT is a silent no-op rather than a leak. Which is the right
+            // failure — a uuid typed into the shared file by hand must not become
+            // a link to somebody's private receipt — and it is silent, so it is
+            // stated here rather than discovered.
+            await _attachments.LinkAsync(attachmentId, targets, cancellationToken);
+        }
     }
 
     /// <summary>

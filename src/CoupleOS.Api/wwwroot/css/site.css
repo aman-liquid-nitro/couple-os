@@ -61,3 +61,26 @@ li.turn.reply .what { color: var(--fg); }
    the text column so it lines up with the words it is qualifying. */
 li.turn ul.changes { grid-column: 2; list-style: none; padding: 0; margin: 0.35rem 0 0;
                      font-size: 0.9rem; color: var(--muted); }
+
+/* The read surface. One row per record, on a phone, so the line breaks where
+   the eye needs it to rather than at a table column somebody chose. */
+ul.captured { list-style: none; padding: 0; margin: 0 0 1.5rem 0; }
+ul.captured li {
+    padding: 0.5rem 0;
+    border-bottom: 1px solid var(--line);
+    display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: baseline;
+}
+ul.captured .what { font-weight: 600; }
+ul.captured .warn { color: var(--warn); }
+ul.captured .scope {
+    color: var(--warn); border: 1px solid var(--warn);
+    border-radius: 0.6rem; padding: 0 0.45rem; font-size: 0.8em;
+}
+ul.captured .attached a { margin-right: 0.5rem; }
+
+/* The upload control. Its own line, below the editor rather than beside it:
+   attaching a file is a rarer act than typing, and putting it in the way of the
+   thing people do every time is how a capture box becomes a form. */
+#attach { margin: 0.5rem 0 1rem 0; display: flex; gap: 0.6rem; align-items: baseline; flex-wrap: wrap; }
+#attach label { color: var(--muted); }
+#attach .warn { color: var(--warn); }

@@ -1,3 +1,4 @@
+using CoupleOS.Application.Attachments;
 using CoupleOS.Application.Capture;
 using CoupleOS.Application.Conversation;
 using CoupleOS.Application.Identity;
@@ -16,6 +17,7 @@ public static class ApplicationServiceCollectionExtensions
         services.AddScoped<IBlockProcessor, BlockProcessor>();
         services.AddScoped<ICaptureIntake, CaptureIntake>();
         services.AddScoped<ISharedFileEditor, SharedFileEditor>();
+        services.AddScoped<IAttachmentIntake, AttachmentIntake>();
 
         // ADR 0009's other surface. It shares the tool registry and the dispatcher
         // registered above and nothing else, which is the whole of what "one

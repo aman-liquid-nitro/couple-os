@@ -26,11 +26,13 @@ public sealed class BlockProcessorStatusTests
         ILlmProvider provider,
         IToolDispatcher dispatcher,
         RecordingBlockStore store,
-        CountingUnitOfWork unitOfWork) =>
+        CountingUnitOfWork unitOfWork,
+        RecordingAttachments? attachments = null) =>
         new(provider,
             new EmptyRegistry(),
             dispatcher,
             store,
+            attachments ?? new RecordingAttachments(),
             unitOfWork,
             new FixedScope(),
             TimeProvider.System);

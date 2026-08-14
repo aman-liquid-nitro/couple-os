@@ -97,6 +97,11 @@ services:
       Llm__Ollama__NumCtx: ${LLM_NUM_CTX:-4096}
       Llm__Ollama__Think: ${LLM_THINK:-false}
       Anthropic__ApiKey: ${ANTHROPIC_API_KEY:-}
+      # Matches the volume below and the directory the Dockerfile creates. Stated
+      # rather than left to the default so the three cannot drift apart silently
+      # — the failure if they do is uploads landing in the container's writable
+      # layer and disappearing on the next `up`.
+      Attachments__Root: /var/lib/coupleos/attachments
     ports:
       - "${API_PORT:-8080}:8080"
     volumes:
@@ -111,6 +116,12 @@ services:
       # belong in Docker's storage rather than in the working tree where a stray
       # `git add -A` could commit them.
       - coupleos-dataprotection:/home/app/.aspnet/DataProtection-Keys
+
+      # Attachment bytes (ADR 0014). A named volume for the same two reasons as
+      # the key ring: they must survive `up --build`, and they are the couple's
+      # private data — a bind mount would put a receipt for a surprise into the
+      # working tree, where a stray `git add -A` could commit it.
+      - coupleos-attachments:/var/lib/coupleos/attachments
     depends_on:
       db:
         condition: service_healthy
@@ -125,3 +136,4 @@ services:
 volumes:
   coupleos-pgdata:
   coupleos-dataprotection:
+  coupleos-attachments:

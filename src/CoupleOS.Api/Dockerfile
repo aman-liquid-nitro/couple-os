@@ -57,18 +57,25 @@ RUN apt-get update \
 WORKDIR /app
 COPY --from=build /app .
 
-# The one directory the app writes to: ASP.NET's data protection key ring, which
-# encrypts antiforgery tokens. Compose mounts a named volume here so the keys
-# outlive the container.
+# The two directories the app writes to: ASP.NET's data protection key ring,
+# which encrypts antiforgery tokens, and the attachment bytes (ADR 0014).
+# Compose mounts a named volume over each so both outlive the container.
 #
-# It has to exist in the image, owned by the runtime user, and that is the whole
-# reason for this line. Docker seeds a new named volume from the image directory
-# it covers — including its ownership — but only if that directory exists. Create
-# the volume over a path the image does not have and Docker makes it root-owned;
-# the app then starts as uid 1654, cannot write its own key ring, and every page
-# 500s. Which is what happened.
-RUN mkdir -p /home/app/.aspnet/DataProtection-Keys \
- && chown -R $APP_UID:$APP_UID /home/app/.aspnet
+# They have to exist in the image, owned by the runtime user, and that is the
+# whole reason for these lines. Docker seeds a new named volume from the image
+# directory it covers — including its ownership — but only if that directory
+# exists. Create the volume over a path the image does not have and Docker makes
+# it root-owned; the app then starts as uid 1654 and cannot write to its own
+# volume.
+#
+# Which has now happened twice. The first time every page 500ed on a key ring it
+# could not write. The second was this line's absence: attachments shipped with
+# the volume and the compose entry and without the mkdir, and the first upload in
+# a browser came back "Permission denied" on a directory the container owns
+# everywhere except where it counts. The comment above was already here and
+# describing it.
+RUN mkdir -p /home/app/.aspnet/DataProtection-Keys /var/lib/coupleos/attachments \
+ && chown -R $APP_UID:$APP_UID /home/app/.aspnet /var/lib/coupleos
 
 # Provided by the base image (uid 1654). The app binds 8080, so it needs no
 # privileged port, and it writes nothing to disk except the key ring above.

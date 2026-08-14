@@ -1,13 +1,16 @@
+using CoupleOS.Application.Attachments;
 using CoupleOS.Application.Capture;
 using CoupleOS.Application.Conversation;
 using CoupleOS.Application.Identity;
 using CoupleOS.Application.Persistence;
+using CoupleOS.Application.Reading;
 using CoupleOS.Application.Time;
 using CoupleOS.Application.Tools;
 using CoupleOS.Domain.Enums;
 using CoupleOS.Application.Security;
 using CoupleOS.Infrastructure.Identity;
 using CoupleOS.Infrastructure.Persistence;
+using CoupleOS.Infrastructure.Storage;
 using CoupleOS.Infrastructure.Security;
 using CoupleOS.Infrastructure.Time;
 using Microsoft.EntityFrameworkCore;
@@ -92,6 +95,14 @@ public static class InfrastructureServiceCollectionExtensions
         services.AddScoped<IDumpRunStore, DumpRunStore>();
 
         services.AddScoped<IConversationStore, ConversationStore>();
+
+        // The rows are scoped, and the bytes are not: a disk has no couple.
+        // Splitting them is ADR 0014's point, and the registration lifetimes say
+        // it out loud — one per request, one for the process.
+        services.AddScoped<IAttachments, AttachmentStore>();
+        services.AddScoped<ICapturedRecords, CapturedRecords>();
+        services.TryAddSingleton(new AttachmentStorageOptions());
+        services.AddSingleton<IAttachmentStore, FilesystemAttachmentStore>();
 
         // Scoped, because it caches the couple's zone for the request: a dump run
         // resolves a date per block and a couple does not move between them.

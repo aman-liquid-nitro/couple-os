@@ -1,0 +1,22 @@
+@using CoupleOS.Application.Attachments
+@using CoupleOS.Domain.Entities
+@model IReadOnlyList<Attachment>
+
+@*
+    The files this record carries.
+
+    Linked by id rather than by name, so renaming the label in shared.md does not
+    break the link — and the href is the same path the markdown in the file
+    points at, because there is one download route and one format
+    (AttachmentReference).
+*@
+
+@if (Model.Count > 0)
+{
+    <span class="attached">
+        @foreach (var attachment in Model)
+        {
+            <a href="@AttachmentReference.Path(attachment.Id)">@attachment.Filename</a>
+        }
+    </span>
+}

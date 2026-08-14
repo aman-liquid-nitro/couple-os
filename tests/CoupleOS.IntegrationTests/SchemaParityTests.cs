@@ -45,6 +45,18 @@ public sealed class SchemaParityTests : IClassFixture<RlsFixture>
             // letting CURRENT_DATE decide — the server's today is not the couple's.
             "expenses",
 
+            // M5. attachments has six NOT NULL columns with no default —
+            // couple_id, visibility, filename, mime_type, byte_size and
+            // storage_key — and byte_size carries a CHECK on top, so an unmapped
+            // one is not a wrong value but a failed insert at the moment somebody
+            // first photographs a receipt. attachment_links is all three of its
+            // columns, being a composite key and nothing else.
+            //
+            // ocr_status is NOT NULL *with* a default, which is what lets it stay
+            // deliberately unmapped: nothing here can claim an image was read
+            // (ADR 0014).
+            "attachments", "attachment_links",
+
             // M1 identity. All five are inserted into during sign-in and
             // invitation, so every NOT NULL column without a default must be
             // mapped — the failure otherwise is a constraint violation at the

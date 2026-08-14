@@ -5,6 +5,7 @@ using CoupleOS.Application.Identity;
 using CoupleOS.AI.DependencyInjection;
 using CoupleOS.Infrastructure.DependencyInjection;
 using CoupleOS.Infrastructure.Identity;
+using CoupleOS.Infrastructure.Storage;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -36,6 +37,20 @@ builder.Services.AddSingleton(
 builder.Services.AddCoupleOsMail(
     builder.Configuration.GetSection("Smtp").Get<SmtpOptions>() ?? new SmtpOptions(),
     builder.Environment.IsDevelopment());
+
+// ADR 0014's one value. Registered after AddCoupleOsInfrastructure, which uses
+// TryAdd for its default, so a configured root wins and an absent section leaves
+// the path the Dockerfile creates and chowns.
+//
+// Guarded on the section existing rather than on the bound object, because
+// binding an absent section to a type whose properties all have defaults
+// succeeds and returns those defaults — which would look like configuration and
+// be nothing of the kind.
+if (builder.Configuration.GetSection("Attachments") is { } attachmentSection && attachmentSection.Exists())
+{
+    builder.Services.AddSingleton(
+        attachmentSection.Get<AttachmentStorageOptions>() ?? new AttachmentStorageOptions());
+}
 
 builder.Services.AddScoped<CurrentSession>();
 builder.Services.AddScoped<IMagicLinkUrlFactory, MagicLinkUrlFactory>();

@@ -37,6 +37,7 @@ public sealed class BlockProcessorAttributionTests
             new EmptyRegistry(),
             dispatcher,
             new RecordingBlockStore(),
+            new RecordingAttachments(),
             new CountingUnitOfWork(),
             new FixedScope(),
             TimeProvider.System);

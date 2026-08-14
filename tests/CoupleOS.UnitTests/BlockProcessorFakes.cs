@@ -1,5 +1,6 @@
 using System.Text.Json;
 using CoupleOS.Application.AI;
+using CoupleOS.Application.Attachments;
 using CoupleOS.Application.Capture;
 using CoupleOS.Application.Persistence;
 using CoupleOS.Application.Security;
@@ -152,6 +153,37 @@ internal static class BlockProcessorFakes
 
             return Task.CompletedTask;
         }
+    }
+
+    /// <summary>
+    /// Remembers which attachments were linked to what. A no-op double would let
+    /// "the receipt reached the expense" compile and never be checked.
+    /// </summary>
+    public sealed class RecordingAttachments : IAttachments
+    {
+        public List<(Guid Attachment, string EntityType, Guid EntityId)> Links { get; } = [];
+
+        public Task AddAsync(Attachment attachment, CancellationToken cancellationToken = default) =>
+            Task.CompletedTask;
+
+        public Task<Attachment?> FindAsync(Guid id, CancellationToken cancellationToken = default) =>
+            Task.FromResult<Attachment?>(null);
+
+        public Task LinkAsync(
+            Guid attachmentId,
+            IReadOnlyList<AttachmentTarget> targets,
+            CancellationToken cancellationToken = default)
+        {
+            Links.AddRange(targets.Select(t => (attachmentId, t.EntityType, t.EntityId)));
+
+            return Task.CompletedTask;
+        }
+
+        public Task<IReadOnlyList<Attachment>> ForAsync(
+            string entityType,
+            IReadOnlyList<Guid> entityIds,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult<IReadOnlyList<Attachment>>([]);
     }
 
     public sealed class NoopTransaction : ICoupleTransaction

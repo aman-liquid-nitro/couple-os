@@ -140,6 +140,7 @@ public sealed class PipelineEvals(ITestOutputHelper output)
                 new BlockProcessorFakes.EmptyRegistry(),
                 dispatcher,
                 new BlockProcessorFakes.RecordingBlockStore(),
+                new BlockProcessorFakes.RecordingAttachments(),
                 new BlockProcessorFakes.CountingUnitOfWork(),
                 new BlockProcessorFakes.FixedScope(),
                 TimeProvider.System);

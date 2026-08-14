@@ -1,0 +1,7 @@
+@page "/attachments/{id:guid}"
+@model CoupleOS.Api.Pages.Attachments.DownloadModel
+@* No markup. The handler returns the file or a 404, and this page exists only
+   to give that handler a route. A Razor page rather than a minimal API endpoint
+   so it goes through the same SessionAuthenticationMiddleware as everything
+   else — an endpoint mapped outside the page pipeline is exactly where a
+   "temporarily" unauthenticated download would be introduced. *@

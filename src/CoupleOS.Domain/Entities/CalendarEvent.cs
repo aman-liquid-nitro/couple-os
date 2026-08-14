@@ -72,4 +72,17 @@ public sealed class CalendarEvent
 
     /// <summary>Free text in the schema, one of a closed set in the tool that writes it.</summary>
     public string? Category { get; init; }
+
+    /// <summary>
+    /// The database's, never the CLR's — <c>ValueGeneratedOnAdd</c>, so an
+    /// unset property does not overwrite <c>now()</c> with year one and sort
+    /// first in every list forever.
+    ///
+    /// Mapped for the read surface, which orders by it. Ordering by the id
+    /// instead would work today and stop working quietly: a v7 uuid is
+    /// time-ordered to the millisecond and random below it, and the column
+    /// default is <c>gen_random_uuid()</c> for anything this application did not
+    /// write.
+    /// </summary>
+    public DateTimeOffset CreatedAt { get; init; }
 }

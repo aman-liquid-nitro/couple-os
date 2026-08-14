@@ -1,0 +1,160 @@
+@page
+@using CoupleOS.Application.Attachments
+@using CoupleOS.Domain.Entities
+@using CoupleOS.Domain.Enums
+@using System.Globalization
+@model CapturedModel
+@{ ViewData["Title"] = "Captured"; }
+
+<h1>What we have</h1>
+<p class="muted">
+    Everything you can see from here, grouped by kind. Not a summary — the rows
+    themselves, so you can check the system understood you.
+</p>
+
+@if (Model.View.NothingYet)
+{
+    <p>Nothing captured yet. Write something in <a asp-page="/Index">shared.md</a> and press Process.</p>
+}
+else
+{
+    @if (Model.View.Truncated)
+    {
+        @* Said out loud. A page that silently shows the first fifty of two
+           hundred tells the couple they said less than they did, on the one
+           screen that exists for checking what was understood. *@
+        <p class="warn">Showing the most recent 50 of each kind — there are more.</p>
+    }
+
+    @* Private rows carry a marker, and only where one is genuinely present.
+       A partner reading this page sees their own private items among the shared
+       ones and nothing of the other's, so without the marker there is no way to
+       tell which is which — and "is this one shared?" is exactly the question
+       ADR 0009 makes the person responsible for answering. *@
+
+    @if (Model.View.Shopping.Count > 0)
+    {
+        <h2>Shopping</h2>
+        <ul class="captured">
+            @foreach (var item in Model.View.Shopping)
+            {
+                <li>
+                    <span class="what">@item.Name</span>
+                    @if (!string.IsNullOrWhiteSpace(item.Quantity))
+                    {
+                        <span class="muted">@item.Quantity</span>
+                    }
+                    @await Html.PartialAsync("_Scope", item.Visibility)
+                </li>
+            }
+        </ul>
+    }
+
+    @if (Model.View.Tasks.Count > 0)
+    {
+        <h2>To do</h2>
+        <ul class="captured">
+            @foreach (var task in Model.View.Tasks)
+            {
+                <li>
+                    <span class="what">@task.Title</span>
+                    @if (task.Kind == TaskItemKind.Commitment)
+                    {
+                        @* §11 gives a commitment social weight a plain task does
+                           not have, and the read surface is where that weight is
+                           either visible or lost. *@
+                        <span class="muted">a commitment</span>
+                    }
+                    @if (task.DueAt is { } due)
+                    {
+                        <span class="muted">by @due.ToLocalTime().ToString("ddd d MMM, HH:mm", CultureInfo.InvariantCulture)</span>
+                    }
+                    @await Html.PartialAsync("_Scope", task.Visibility)
+                    @await Html.PartialAsync("_Attached", Model.View.AttachmentsFor(task.Id))
+                </li>
+            }
+        </ul>
+    }
+
+    @if (Model.View.Events.Count > 0)
+    {
+        <h2>Dates</h2>
+        <ul class="captured">
+            @foreach (var occasion in Model.View.Events)
+            {
+                <li>
+                    <span class="what">@occasion.Title</span>
+                    <span class="muted">
+                        @(occasion.AllDay
+                            ? occasion.StartsAt.ToLocalTime().ToString("ddd d MMM yyyy", CultureInfo.InvariantCulture)
+                            : occasion.StartsAt.ToLocalTime().ToString("ddd d MMM yyyy, HH:mm", CultureInfo.InvariantCulture))
+                    </span>
+                    @if (!string.IsNullOrWhiteSpace(occasion.RecurrenceRule))
+                    {
+                        <span class="muted">repeats</span>
+                    }
+                    @await Html.PartialAsync("_Scope", occasion.Visibility)
+                    @await Html.PartialAsync("_Attached", Model.View.AttachmentsFor(occasion.Id))
+                </li>
+            }
+        </ul>
+    }
+
+    @if (Model.View.Expenses.Count > 0)
+    {
+        <h2>Money</h2>
+        @* Rows, and deliberately no total. Finance aggregation is cut from V0
+           with a reason, and boundary-002 asserts that nothing in this system
+           produces a spending figure — a sum added here would answer the
+           question the tool layer refuses to. *@
+        <ul class="captured">
+            @foreach (var expense in Model.View.Expenses)
+            {
+                <li>
+                    <span class="what">@expense.Amount.ToString("N2", CultureInfo.InvariantCulture) @expense.Currency</span>
+                    @if (!string.IsNullOrWhiteSpace(expense.Description))
+                    {
+                        <span>@expense.Description</span>
+                    }
+                    <span class="muted">@expense.OccurredOn.ToString("d MMM yyyy", CultureInfo.InvariantCulture)</span>
+                    @if (expense.PaidBy is null)
+                    {
+                        @* The gap create_expense deliberately leaves rather than
+                           guessing (§14), carried through to the page so it can
+                           still be corrected. *@
+                        <span class="warn">who paid is not recorded</span>
+                    }
+                    @await Html.PartialAsync("_Scope", expense.Visibility)
+                    @await Html.PartialAsync("_Attached", Model.View.AttachmentsFor(expense.Id))
+                </li>
+            }
+        </ul>
+    }
+
+    @if (Model.View.Memories.Count > 0)
+    {
+        <h2>What we know</h2>
+        <ul class="captured">
+            @foreach (var memory in Model.View.Memories)
+            {
+                <li>
+                    <span class="what">@memory.Content</span>
+                    @if (memory.Assertion == MemoryAssertion.Inferred)
+                    {
+                        @* ADR 0006: an inference reaches a person as a hypothesis
+                           with its provenance, never as a fact. Rendered here for
+                           the same reason search_memory renders it rather than
+                           asking a model to — this is the only place that has seen
+                           the row. *@
+                        <span class="warn">
+                            worked out rather than told
+                            (@memory.Confidence.ToString("0.0#", CultureInfo.InvariantCulture))
+                        </span>
+                    }
+                    <span class="muted">@memory.CreatedAt.ToLocalTime().ToString("d MMM yyyy", CultureInfo.InvariantCulture)</span>
+                    @await Html.PartialAsync("_Scope", memory.Visibility)
+                </li>
+            }
+        </ul>
+    }
+}

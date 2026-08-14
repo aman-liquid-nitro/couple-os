@@ -1,0 +1,22 @@
+@using CoupleOS.Application.Attachments
+@model AttachmentUpload
+
+@*
+    The upload's whole response. It says what happened and hands the markdown to
+    the browser, which decides where in the textarea it goes — the server never
+    sees the caret, and putting the link at the end of a page-long note would
+    separate the receipt from the line it is evidence for.
+
+    HX-Trigger-After-Swap rather than an inline <script>: a script tag swapped
+    into the page runs once and stays in the DOM, so after four uploads there are
+    four of them waiting to run again.
+*@
+
+@if (Model.Accepted)
+{
+    <span>attached · @Model.Attachment!.Filename</span>
+}
+else
+{
+    <span class="warning">@Model.Refusal</span>
+}

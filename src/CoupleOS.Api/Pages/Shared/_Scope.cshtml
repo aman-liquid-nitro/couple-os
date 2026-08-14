@@ -1,0 +1,17 @@
+@using CoupleOS.Domain.Enums
+@model Visibility
+
+@*
+    Marks a private row and says nothing about a shared one.
+
+    Only one of the two is worth a word. Everything on this page is either
+    shared with the partner or the reader's own, so labelling both would put a
+    badge on every line and make the distinction invisible by repetition — and
+    the distinction is the one thing ADR 0009 makes the person, not the system,
+    responsible for.
+*@
+
+@if (Model == Visibility.PrivateUser)
+{
+    <span class="scope">private</span>
+}

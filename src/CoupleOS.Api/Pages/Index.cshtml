@@ -45,5 +45,34 @@
     </p>
 </form>
 
+@* Attachments. Its own form and a separate request, because a file goes up on
+   its own and the textarea does not go with it — posting the whole file's text
+   alongside every receipt would make an upload a save, at a version the person
+   is still holding. hx-encoding is htmx's multipart switch; without it the file
+   is serialised as its name and nothing else. *@
+
+@* method="post" is not decoration and not a fallback. Razor Pages injects the
+   antiforgery token only into a form it recognises as a POST, and htmx posts the
+   form's fields — so without it every upload is a 400 the browser reports as a
+   failed request and the page reports as nothing at all. Which is what happened,
+   in a browser, exactly once. *@
+
+<form id="attach" method="post" hx-post="/?handler=Upload" hx-encoding="multipart/form-data"
+      hx-target="#attach-state" hx-swap="innerHTML" hx-disabled-elt="#attach input">
+    <label for="upload">Attach a file</label>
+    @* The trigger is the file being chosen, so attaching is one tap rather than
+       two — the same argument quick-add is built on. hx-include names the form so
+       the token travels with the file. *@
+    <input type="file" name="upload" id="upload"
+           hx-post="/?handler=Upload" hx-encoding="multipart/form-data"
+           hx-include="#attach" hx-target="#attach-state" hx-swap="innerHTML"
+           hx-trigger="change" />
+    <span id="attach-state" class="muted"></span>
+</form>
+
 <div id="save-state" class="muted"></div>
 <div id="report"></div>
+
+@section Scripts {
+    <script src="~/js/attachments.js" asp-append-version="true"></script>
+}
