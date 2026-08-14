@@ -1,0 +1,182 @@
+# The gate, run by something that is not a person remembering to.
+#
+# Open decision 1 in IMPLEMENTATION_PLAN.md asked whether "CI gate" would mean
+# GitHub Actions or a script; STATUS debt 23 recorded the answer as "a command
+# someone remembers to run". Both, now — scripts/check.ps1 and scripts/check.sh
+# run exactly what the first two jobs here run, so a green local run and a green
+# CI run mean the same thing.
+#
+# Two jobs and a deliberate split. `deterministic` needs no model and no
+# credential, so it runs on every push from a fork or a branch and is the job
+# whose red means the code is wrong. `evals` calls a hosted model, costs money
+# and time, and cannot run without a secret — so it is conditional, and when the
+# secret is absent it does not silently pass: `gate` fails and says which.
+#
+# That last part is the whole point. A skipped job that reports green is the
+# failure this milestone exists to remove, one layer up from the eval set.
+
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+  workflow_dispatch:
+
+env:
+  DOTNET_NOLOGO: "true"
+  DOTNET_CLI_TELEMETRY_OPTOUT: "true"
+
+jobs:
+  deterministic:
+    name: Build, unit, SQL and integration
+    runs-on: ubuntu-latest
+
+    services:
+      db:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_DB: coupleos
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: dev
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -h 127.0.0.1 -U postgres -d coupleos"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      # A service container cannot mount the init scripts the compose stack
+      # does, so the schema and the application role are applied here — in the
+      # same order and from the same files, because ADR 0012 makes schema.sql
+      # authoritative and a second copy of it would drift within a week.
+      - name: Create the schema and the application role
+        env:
+          PGPASSWORD: dev
+          APP_DB_USER: app_user
+          APP_DB_PASSWORD: dev_app
+        run: |
+          psql -h localhost -U postgres -d coupleos -v ON_ERROR_STOP=1 -f data/schema.sql
+          POSTGRES_USER=postgres POSTGRES_DB=coupleos bash data/docker-init-app-role.sh
+
+      - name: Refuse to run as a role that bypasses row-level security
+        env:
+          PGPASSWORD: dev_app
+        run: |
+          # The suite asserts this too, and it is asserted twice on purpose:
+          # a run connected as a superuser executes every isolation test, reads
+          # every row, and proves nothing at all. Failing here means the job
+          # says why in one line instead of nineteen stack traces.
+          psql -h localhost -U app_user -d coupleos -tAc \
+            "SELECT rolsuper OR rolbypassrls FROM pg_roles WHERE rolname = current_user" \
+            | grep -qx f
+
+      - run: dotnet build CoupleOS.slnx --configuration Release
+
+      - name: Unit tests
+        run: dotnet test tests/CoupleOS.UnitTests --configuration Release --no-build
+
+      - name: Integration tests
+        env:
+          COUPLEOS_ADMIN_DB: "Host=localhost;Port=5432;Database=coupleos;Username=postgres;Password=dev"
+          COUPLEOS_APP_DB: "Host=localhost;Port=5432;Database=coupleos;Username=app_user;Password=dev_app"
+        run: dotnet test tests/CoupleOS.IntegrationTests --configuration Release --no-build
+
+      - name: Row-level security assertions, in SQL
+        env:
+          PGPASSWORD: dev
+        run: psql -h localhost -U postgres -d coupleos -v ON_ERROR_STOP=1 -f data/rls-tests.sql
+
+      # The pipeline and database harnesses have written their halves of the run
+      # record by now. Carried to the gate job, which cannot re-run them.
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: eval-record-deterministic
+          path: artifacts/eval/
+          if-no-files-found: warn
+
+  evals:
+    name: Extraction evals
+    runs-on: ubuntu-latest
+    # A fork's pull request cannot read secrets, so this would fail rather than
+    # skip. Stated as a condition so the reason is in the log.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Check for a model credential
+        id: credential
+        env:
+          OLLAMA_API_KEY: ${{ secrets.OLLAMA_API_KEY }}
+        run: |
+          if [ -n "$OLLAMA_API_KEY" ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::No OLLAMA_API_KEY secret, so the extraction evals cannot run. The gate will fail on the cases they would have covered rather than passing without them."
+          fi
+
+      - if: steps.credential.outputs.present == 'true'
+        run: dotnet build CoupleOS.slnx --configuration Release
+
+      - name: Extraction evals
+        if: steps.credential.outputs.present == 'true'
+        env:
+          OLLAMA_API_KEY: ${{ secrets.OLLAMA_API_KEY }}
+          OLLAMA_BASE_URL: https://ollama.com
+          LLM_FAST_MODEL: gemma4:31b
+          LLM_DEEP_MODEL: gemma4:31b
+          # One sample in CI. Three is right for a run somebody is reading, and
+          # in CI it triples a two-and-a-half minute job to get a distribution
+          # nobody looks at until something is red — at which point they re-run
+          # it locally at three anyway.
+          EVAL_SAMPLES: "1"
+        run: dotnet test tests/CoupleOS.AITests --configuration Release --no-build
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: eval-record-extraction
+          path: artifacts/eval/
+          if-no-files-found: warn
+
+  gate:
+    name: Eval gate
+    runs-on: ubuntu-latest
+    needs: [deterministic, evals]
+    # Runs even when a harness failed, because the gate's report is most useful
+    # exactly then: it says which categories are short and which cases never ran.
+    if: always()
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts/download
+
+      - name: Collect the run record
+        run: |
+          mkdir -p artifacts/eval
+          find artifacts/download -name '*.jsonl' -exec cp {} artifacts/eval/ \;
+          ls -la artifacts/eval || true
+
+      - name: Judge
+        run: dotnet run --project tools/CoupleOS.EvalGate

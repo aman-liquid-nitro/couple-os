@@ -210,8 +210,21 @@ SELECT t_eq('B5 deleting the partner private row affects zero rows',
             (SELECT count(*) FROM d), 0);
 COMMIT;
 
+-- Counted over this harness's own two couples, not over the whole table.
+--
+-- It was `count(*) FROM memories`, which was true for as long as nothing else
+-- in the repository wrote a memory, and stopped being true the moment the eval
+-- harnesses did — 29 rows where the assertion wanted 4. Not a leak and not a
+-- regression: rows belonging to a third couple that this section never touches.
+--
+-- The same lesson as STATUS debt 28, one level out. An exact count is the strong
+-- form of "only", and the strong form is worth keeping — so it is narrowed to
+-- the set the assertion is actually about rather than weakened to a range.
+-- A global count here asserts something about other couples' data that this
+-- section has no business asserting, and would keep breaking as the repository
+-- grows things that write rows.
 SELECT t_eq('B6 fixtures survived every write attempt',
-            (SELECT count(*) FROM memories), 4);
+            (SELECT count(*) FROM memories WHERE couple_id IN (:C1, :C2)), 4);
 
 -- ============================================================================
 -- C. CONNECTION REUSE  — the reason this file exists
