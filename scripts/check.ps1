@@ -1,5 +1,5 @@
-# Everything CI runs, locally, in the order CI runs it. The PowerShell half of
-# scripts/check.sh — see that file for why both exist and what --fast means.
+# The gate, all of it. The PowerShell half of scripts/check.sh — see that file
+# for why it is the whole gate rather than a wrapper, and what -Fast means.
 #
 #   .\scripts\check.ps1
 #   .\scripts\check.ps1 -Fast

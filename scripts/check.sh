@@ -1,11 +1,17 @@
 #!/usr/bin/env bash
-# Everything CI runs, locally, in the order CI runs it.
+# The gate. All of it, in one command, because nothing else runs it.
 #
-# The point is that a green run here and a green run there mean the same thing.
-# Two things it does that a bare `dotnet test` does not: it clears the run
-# record first, so the gate cannot score yesterday's numbers, and it runs the
-# gate at the end, which is the only step that can say "forty of fifty-five
+# There is no CI by decision (IMPLEMENTATION_PLAN.md, first decision), so this
+# script is not a convenience wrapper around a hosted runner — it is the thing
+# itself. Two things it does that a bare `dotnet test` does not: it clears the
+# run record first, so the gate cannot score yesterday's numbers, and it runs
+# the gate at the end, which is the only step that can say "forty of fifty-five
 # cases, all green".
+#
+# Run it from a clean stack when the answer matters:
+#   docker compose down -v && docker compose up -d --build
+# A green run against accumulated local state is a weaker claim, and that is the
+# half a hosted runner would have covered.
 #
 #   ./scripts/check.sh              everything, three samples per eval case
 #   ./scripts/check.sh --fast       skip the model, and let the gate say so

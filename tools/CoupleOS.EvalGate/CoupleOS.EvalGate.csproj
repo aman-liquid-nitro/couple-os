@@ -7,8 +7,7 @@
        obvious: the harnesses run in three test projects, xUnit has no way to
        aggregate a verdict across them, and the nearest fake — a collection
        fixture asserting thresholds on dispose — would put the decision inside a
-       teardown, which is the one place a failure is easiest to miss. Running the
-       tests and then running this is also what a CI job looks like anyway. -->
+       teardown, which is the one place a failure is easiest to miss. -->
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>

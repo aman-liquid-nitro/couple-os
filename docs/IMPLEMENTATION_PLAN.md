@@ -21,7 +21,7 @@ Scope: [V0_SCOPE.md](./V0_SCOPE.md). Governed by ADRs 0001–0009.
 | Deployment | `docker compose` locally throughout. Where the live test runs is decided at M5, not before. |
 | Delivery | Work lands on feature branches, written directly to the repo and reviewed by `git diff`. Nothing reaches `main` without an explicit merge. |
 | First slice | Row-level security through EF Core, before anything is built on top of it. |
-| Pace | Steady. Built properly, used when ready. Full test coverage and CI from M0. |
+| Pace | Steady. Built properly, used when ready. Full test coverage from M0; CI reconsidered and dropped at M5 — see the decisions still open. |
 
 ## Working agreement
 
@@ -240,7 +240,7 @@ produces success language in the response.
 Harness exists from M0; this milestone fills it out and enforces it.
 
 - [x] All 55 cases in [`../data/eval-cases.jsonl`](../data/eval-cases.jsonl) runnable
-- [x] CI gate: **≥90% happy path, 100% privacy, 100% prompt injection, 100% idempotency**
+- [x] Gate: **≥90% happy path, 100% privacy, 100% prompt injection, 100% idempotency**
 - [x] Cases targeting V1 tools assert honest *unsupported* handling, not silence
 - [x] Per-case cost and latency recorded, per SPEC.md §49
 
@@ -290,7 +290,7 @@ V0_SCOPE.md rather than here.
 | Risk | Milestone | Mitigation |
 |---|---|---|
 | RLS does not survive EF Core connection pooling | M0 | The 100-request interleaving test. Failing it stops everything until fixed. |
-| Migration drifts from `schema.sql` | M0 | Parity test in CI |
+| Migration drifts from `schema.sql` | M0 | Parity test in `scripts/check.sh` |
 | App accidentally runs as a superuser role in production | M0 | Startup assertion refusing to boot on a `BYPASSRLS` or superuser role |
 | Batch extraction quality is worse than per-message | M2 | Eval harness comparison before committing to batch |
 | Change report is not good enough to carry the feedback loop | M2 | It is the ADR 0009 risk; treat report quality as a feature, not output formatting |
@@ -312,5 +312,7 @@ None are cut because they are unimportant.
 
 ## Decisions still open
 
-1. ~~**CI.**~~ **Settled at M4: both.** A remote exists now. `.github/workflows/ci.yml` runs the deterministic suite on every push and the model-dependent evals only when an `OLLAMA_API_KEY` secret is present — and when it is absent the gate job fails naming the cases that never ran, rather than reporting green for a third of a suite. `scripts/check.sh` and `check.ps1` run the same steps locally, in the same order, so the two agree by construction.
+1. ~~**CI.**~~ **Settled: no CI, deliberately.** The gate is `scripts/check.sh` (and `check.ps1`), run on demand. A hosted runner was built at M4 and removed: it bought two things, and only one of them was worth the price. It runs when you forget — which is real — and it runs on a clean machine, which is the half that has actually caught defects. What it does not buy is the usual reason for it, because there is no team to coordinate and no pull-request flow to block. Against that, the eval job calls a hosted model on every push to every branch, for a suite whose own design says a run is a sample rather than a verdict. One person, one machine, one command.
+
+   The clean-machine half is what is genuinely given up, and it is given up knowingly: two of M5's defects were a stale Docker volume and a form that only worked because the browser already held a token, and neither would survive a build from nothing. `docker compose down -v` before a run that matters is the manual version.
 2. **Deployment target.** Deferred to M5 by decision. The candidates are a cloud VPS or self-hosting behind Tailscale; the latter fits SPEC.md §40's privacy stance and costs nothing.

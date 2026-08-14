@@ -1,8 +1,13 @@
 using CoupleOS.Evals;
 
-// The CI gate from IMPLEMENTATION_PLAN.md M4, and the thing that turns the
-// harness into one: ≥90% happy path, 100% privacy, 100% prompt injection, 100%
+// The gate from IMPLEMENTATION_PLAN.md M4, and the thing that turns the harness
+// into one: ≥90% happy path, 100% privacy, 100% prompt injection, 100%
 // idempotency, over a run record the harnesses wrote.
+//
+// Nothing runs this but a person (there is no CI, by decision), which makes the
+// third failure below the important one rather than a nicety: the run record is
+// whatever was left in artifacts/eval, and a gate that judged only what it found
+// there would report green on a harness somebody skipped ten minutes ago.
 //
 // It fails on three things and the third is the one worth having. A category
 // under its bar, obviously. A result naming a case the eval set does not

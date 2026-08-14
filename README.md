@@ -132,10 +132,15 @@ fail when a policy is removed, so a green run means something.
 ```
 
 (`.\scripts\check.ps1` on PowerShell.) Build, unit tests, integration tests, the
-SQL assertions above, the eval suite and then the **eval gate** — the same steps
-in the same order as `.github/workflows/ci.yml`, so a green run here and a green
-run there mean the same thing. Loads `.env` itself, which a bare `dotnet test`
-does not.
+SQL assertions above, the eval suite and then the **eval gate**. This is the
+gate — there is no CI, by decision, so nothing runs it but you. Loads `.env`
+itself, which a bare `dotnet test` does not.
+
+Run it from a clean stack when the result matters. Two of M5's defects were a
+Docker volume created before the image had the directory and a form that only
+worked because the browser already held a token, and neither survives
+`docker compose down -v && docker compose up -d --build` — which is the manual
+half of what a hosted runner would have done.
 
 `--fast` skips the model. The gate then *fails*, naming the 51 cases that never
 ran, which is the point: a suite that reports green having skipped a third of
