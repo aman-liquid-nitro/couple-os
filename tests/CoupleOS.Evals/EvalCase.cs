@@ -151,4 +151,17 @@ public sealed record EvalToolExpectation
     /// multi-003 finally tests the thing it has always claimed to test.
     /// </summary>
     [JsonPropertyName("outcome")] public string? Outcome { get; init; }
+
+    /// <summary>
+    /// Which block of a multi-line input this call belongs to, zero-based, for
+    /// the pipeline harness.
+    ///
+    /// Declared rather than inferred. One call per block in order covers
+    /// <c>dump-004</c> and breaks on <c>dump-003</c>, where three lines produce
+    /// four records because "we need rice and dal" is one block and two items —
+    /// which is the case's whole point. Guessing the mapping from the text would
+    /// be a second extraction step inside the harness that is supposed to have no
+    /// model in it.
+    /// </summary>
+    [JsonPropertyName("block")] public int? Block { get; init; }
 }
