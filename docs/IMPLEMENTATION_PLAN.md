@@ -279,9 +279,12 @@ rather than its filename, so one implementation writes it and one reads it back,
 and a Process links it to every record its block produced.
 
 `/Captured` is the read surface: rows grouped by kind, private ones marked, no
-totals anywhere. **V0 is complete.** What it is not is validated — that is what
-the week of real use is for, and the bar it is measured against is in
-V0_SCOPE.md rather than here.
+totals anywhere. **All five milestones are met.** V0_SCOPE's done-checklist was
+then reconciled line by line against what the suites assert, and came out twelve
+of fourteen: no seeded memory corpus (STATUS debt 47) and no stored tool output
+in `ai_actions` (debt 48). Neither blocks a week of use and both are named rather
+than rounded up. What V0 is not is validated — that is what the week is for, and
+the bar it is measured against is in V0_SCOPE.md rather than here.
 
 ---
 

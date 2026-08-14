@@ -1,6 +1,6 @@
 # Status
 
-**Updated:** 2026-08-14 · **Milestone:** M5 met. **V0 is complete** — every milestone's exit criteria are met and machine-checked. Not yet validated: that is the week of real use.
+**Updated:** 2026-08-14 · **Milestone:** M5 met. **Every milestone's exit criteria are met and machine-checked.** V0_SCOPE's own done-checklist is twelve of fourteen — the two open ones are debt 47 and debt 48, both real and both small. Not yet validated either way: that is the week of real use.
 
 This file records **state**. [IMPLEMENTATION_PLAN.md](./IMPLEMENTATION_PLAN.md)
 records **intent** — what each milestone is for and how it ends. Read the plan
@@ -15,7 +15,7 @@ updated speculatively is worse than none.
 
 | | |
 |---|---|
-| Milestone | M5 (attachments and the read surface) closed; M0–M4 closed. **V0 complete** |
+| Milestone | M5 (attachments and the read surface) closed; M0–M4 closed. **All five milestones met**; V0_SCOPE's checklist 12/14 (debts 47, 48) |
 | Commits | 58 |
 | Architecture decisions | 14 |
 | Tests | 509 plus 42 SQL assertions, all shown capable of failing (54 need a model provider configured) |
@@ -726,6 +726,8 @@ this milestone paid two of them.
 | A dated item reaching `create_task` instead of `create_reminder`, and a vague one failing rather than asking (debt 44) | M5 or V1 |
 | Deduplicating shopping items — SPEC.md §44 for the entity a couple adds most often (debt 45) | M5 or V1 |
 | Reconciling an attachment row against the file it points at, and deleting either (debt 46) | V1 |
+| A memory corpus big enough for ranking to be measurable — searches today run against two rows (debt 47) | V1 |
+| What a tool *returned*, in `ai_actions.result` — the column has no property on the entity (debt 48) | V1 |
 
 ---
 
@@ -807,6 +809,10 @@ citation at the wrong paragraph.
 45. **Nothing deduplicates shopping items, and debt 31's safety argument assumed it did.** `shopping_pattern` is a plain index rather than a unique one, `ShoppingItemWriter` inserts unconditionally, and `CreateShoppingItemTool` looks nothing up — so a second *"we need detergent"* makes a second row and no report line mentions the first. SPEC.md §44 is therefore unimplemented for the entity a couple adds most often, which is also the one where a duplicate is most likely to be noticed and least likely to be forgiven. **The consequence reaches further than the list.** Debt 31 explains that answering a parked question by editing the line re-hashes it into a new block that re-runs every tool the first pass ran, and calls that "harmless today by luck rather than design: `create_shopping_item` deduplicates on `normalized_name` and it is the only writing tool registered". The first half is still true and the luck was never there. Six writing tools now dedupe on nothing except `create_memory`, and only when the model supplies a `subject_key`. The narrow fix is the shape `create_memory` already has — a lookup on `(couple_id, normalized_name)` among rows still `needed`, and `ToolExecution.Unchanged` with "already on the list" — which is small, and it is a change to what the couple sees rather than only to what is stored, so it wants deciding rather than slipping in. `dedup-001` carries `known_failure` on the database harness; its extraction half passes, because the model's behaviour was never the problem. *(M5 or V1)*
 
 46. **Nothing reconciles an attachment row against its bytes, and nothing deletes either.** ADR 0014 names the consequence and this is where it is tracked. The bytes are written before the row, so a crash between them leaves a file nothing points at — wasted space — and the other order would leave a row pointing at nothing, which is a broken link on a page and an error a person has to interpret. The download path already answers a missing file with a 404 rather than a 500, so the visible failure is bounded and honest. What does not exist is a sweep, and building one now would be building a job with nothing to reconcile against: `deleted_at` is mapped and never written, no path removes an attachment, and a couple who leaves takes their volume directory with them. The right sequence is a delete path first and a reconciliation second, and the right time is when there is one. It also carries the other half of this: **the volume is now something a deployment has to preserve**, alongside `coupleos-pgdata` and `coupleos-dataprotection`. *(V1)*
+
+47. **`search_memory` has never been asked a question with more than one plausible answer.** V0_SCOPE's done-checklist wants relevant results "over a seeded corpus of ≥100 memories" and there is no corpus — every search test writes one or two rows carrying a token nothing else contains, so the assertion is that the query matches at all. Ranking is the part that was supposed to be measured: `MemorySearch` blends lexical score with recency, and a corpus of two cannot tell a good blend from a bad one, nor from no blend. This is not the same gap as the missing vector index (ADR 0002 defers that until ~10k rows, deliberately) — a hundred rows is small enough to stay lexical and large enough for a wrong ordering to show. It wants a fixture rather than a design: a hundred memories across the types SPEC.md §8 names, and a handful of queries whose *first* result is asserted rather than whose result set is non-empty. Cheap to build and the reason it was not built is that nothing was blocked on it — which is exactly the shape of a box ticked by assumption, so the box is now unticked. *(V1, and small)*
+
+48. **An `ai_actions` row records what was asked and how it ended, but not what came back.** The `result` jsonb column exists in `data/schema.sql` and has no property on `AiAction`, so nothing writes it and nothing could read it. `Arguments` is the input and `Outcome` is the outcome; `entity_type`/`entity_id` point at the row that was created, which is the closest thing present and is still a pointer rather than a record — it says *which* shopping item, not what the tool reported about it, and for a tool that creates nothing (`search_memory`, `request_clarification`) it is null. So V0_SCOPE's "input, output and outcome" is two of three, and the audit trail SPEC.md §50 wants cannot answer "what did the system tell the couple" from storage; only the rendered report says that, and the report is not kept per call. The narrow fix is one mapped property and one line in the dispatcher, and the reason to think before taking it is that a tool result can carry the couple's own text back into a second place — an audit table is exactly where a private value should not appear twice by accident. *(V1)*
 
 ---
 

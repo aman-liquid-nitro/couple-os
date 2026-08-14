@@ -138,19 +138,25 @@ These cost nothing now because the schema and architecture already accommodate t
 
 V0 is done when all of the following are true.
 
+Each box names what asserts it, because a ticked box with no named assertion is
+an opinion. This list went four milestones without being touched — it was last
+edited at M1, and the two boxes that were ticked were the two true then. What
+follows is the reconciliation against what the suites actually assert; **twelve
+of fourteen hold, and the two that do not are stated rather than rounded up.**
+
 - [x] Two people sign in via magic link and form a couple
-- [ ] Both partners can write to `shared.md` and each sees the other's captures
-- [ ] `Process` produces a change report naming every record created or updated
-- [ ] Re-running `Process` on an unchanged file creates **nothing** (hash dedup)
-- [ ] A private chat capture is never visible to the partner, on any surface
-- [ ] Free-text input is classified into the correct intent for ≥90% of `data/eval-cases.jsonl` happy-path cases
-- [ ] All seven tools execute, validate, authorize and audit correctly
-- [ ] One message producing three actions results in three records, or in an accurate partial-failure message
-- [ ] A private memory is never returned to the partner — verified by the adversarial cases in the eval set, not by inspection
-- [ ] No tool call anywhere can set `visibility`; it is always inherited from the surface
-- [ ] A failed tool call never produces success language in the response
-- [ ] `search_memory` returns relevant results lexically over a seeded corpus of ≥100 memories
-- [ ] Every AI mutation appears in `ai_actions` with input, output and outcome
+- [x] Both partners can write to `shared.md` and each sees the other's captures — `SharedFileEditorTests`: PartnerA writes, PartnerB reads it back in a fresh scope against real Postgres with RLS on, and a save against a stale version writes nothing
+- [x] `Process` produces a change report naming every record created or updated — `CaptureRunTests.Every_block_is_accounted_for_including_the_one_that_produced_no_tool_call`, plus `dump-003` on the pipeline harness, where `change_report_must_list_all` requires a line per call and a count that matches
+- [x] Re-running `Process` on an unchanged file creates **nothing** (hash dedup) — `CaptureRunTests.A_second_process_on_an_unchanged_file_creates_nothing`, and `dump-001` on the database harness, which also asserts the model was called once across two runs
+- [x] A private chat capture is never visible to the partner, on any surface — `PrivateThreadIsolationTests` covers the assistant's turns as well as the user's (the leak M2 found), `privacy-003`/`injection-001`/`injection-004` cover memory search through the real query layer, `attach-002` covers attachments. Three surfaces exist and all three are asserted
+- [x] Free-text input is classified into the correct intent for ≥90% of `data/eval-cases.jsonl` happy-path cases — `ExtractionEvals`, with the bar applied by `EvalGate.Thresholds` (`happy_path` → 0.90) rather than read by a person. Happy path scores 100% over three sampled attempts per case; none of the three `known_failure` cases is in this category. Needs a model provider configured, which is why `check.sh --fast` fails naming what it skipped
+- [x] All seven tools execute, validate, authorize and audit correctly — in two halves, because one of the seven writes nothing. Execution and audit for the writers: `ToolPipelineTests.A_dispatched_call_writes_the_row_and_its_audit_entry` and `A_refused_call_writes_no_row_but_is_still_audited`. Validation and authorization generically over every `ITool`: `ToolDispatcherTests` refuses undeclared properties and any argument naming a scope, and audits every outcome including refusals. `search_memory` has no row to inspect, so its authorization is the RLS suite plus the privacy cases above rather than a write test
+- [x] One message producing three actions results in three records, or in an accurate partial-failure message — `dump-003` for the three records, `multi-003` for the partial failure, run through the pipeline harness with the second call forced to fail and the rendered report read back
+- [x] A private memory is never returned to the partner — verified by the adversarial cases in the eval set, not by inspection — `DatabaseEvals` runs `privacy-003`, `privacy-005`, `injection-001` and `injection-004` through the real query layer and asserts absence. The rest of the adversarial cases run on `extraction` only, so they judge what the model *proposed*, not what the database *returned*; the four above are the ones that close it
+- [x] No tool call anywhere can set `visibility`; it is always inherited from the surface — `ToolCatalogueTests.No_tool_schema_offers_the_model_a_word_for_whose_data_it_is_writing` (no schema may name `visibility`, `couple_id`, `owner_user_id` or `user_id`) and `ToolDispatcherTests`, which fails a call carrying `visibility` whether or not a schema declared it. Two assertions because a schema can be edited and a dispatcher rule cannot be edited by accident
+- [x] A failed tool call never produces success language in the response — `PrivateThreadTests` for the three shapes on the private surface (all refused, nothing at all, half succeeded), `multi-003`'s `response_must_not_claim_success_for` for the shared one. Per-scenario, not a scan of every render path
+- [ ] `search_memory` returns relevant results lexically over a seeded corpus of ≥100 memories — **not asserted, and not weakly: the corpus does not exist.** Every search test writes one or two rows with unique tokens, which proves the query matches and proves nothing about ranking among neighbours. STATUS debt 47
+- [ ] Every AI mutation appears in `ai_actions` with input, output and outcome — **two of three.** `Arguments` is the input and `Outcome` is the outcome, both asserted by `ToolPipelineTests`. The `result` jsonb column has no property on `AiAction` at all, so no output is ever stored — `entity_id` points at what was created, which is a pointer and not a record of what the tool returned. STATUS debt 48
 - [x] The full stack runs from a clean clone with `docker compose up` and one `.env` file
 
 ## Definition of *validated* — the harder bar
