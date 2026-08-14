@@ -18,12 +18,26 @@ namespace CoupleOS.Evals;
 /// because the interesting case is a set of attempts that disagree, and the
 /// disagreement is only legible if each one says what it saw.
 /// </param>
+/// <param name="Errored">
+/// True when the attempt produced no judgement at all — the provider was
+/// unreachable, or answered 503.
+///
+/// <para><b>Separate from failing, and the separation is load-bearing.</b> A
+/// hosted model returning 503 is not evidence that extraction got worse, and
+/// folding it into the pass rate would put a network incident into a number
+/// IMPLEMENTATION_PLAN.md reads as quality — the exact confusion debt 37
+/// describes from the other direction. An errored attempt is excluded from
+/// <see cref="EvalResult.PassRate"/> and counted out loud, and a case whose
+/// every attempt errored is <i>not run</i>, which the gate already treats as a
+/// failure of the run rather than of the model.</para>
+/// </param>
 public sealed record EvalAttempt(
     [property: JsonPropertyName("passed")] bool Passed,
     [property: JsonPropertyName("failure")] string? Failure,
     [property: JsonPropertyName("prompt_tokens")] int PromptTokens,
     [property: JsonPropertyName("completion_tokens")] int CompletionTokens,
-    [property: JsonPropertyName("ms")] double Milliseconds);
+    [property: JsonPropertyName("ms")] double Milliseconds,
+    [property: JsonPropertyName("errored")] bool Errored = false);
 
 /// <summary>
 /// What a harness observed for one case, written to the run record and read by
@@ -43,8 +57,12 @@ public sealed record EvalResult(
     [property: JsonPropertyName("fingerprint")] string Fingerprint,
     [property: JsonPropertyName("attempts")] IReadOnlyList<EvalAttempt> Attempts)
 {
+    /// <summary>Attempts that produced a judgement at all.</summary>
+    [JsonIgnore]
+    public IReadOnlyList<EvalAttempt> Judged => [.. Attempts.Where(a => !a.Errored)];
+
     /// <summary>
-    /// The share of attempts that passed.
+    /// The share of judged attempts that passed.
     ///
     /// A rate rather than a verdict, because the gate's thresholds are
     /// percentages and a boolean would have to decide, here, whether two passes
@@ -54,7 +72,18 @@ public sealed record EvalResult(
     /// fraction.
     /// </summary>
     [JsonIgnore]
-    public double PassRate => Attempts.Count == 0 ? 0 : (double)Attempts.Count(a => a.Passed) / Attempts.Count;
+    public double PassRate => Judged.Count == 0 ? 0 : (double)Judged.Count(a => a.Passed) / Judged.Count;
+
+    /// <summary>
+    /// True when nothing was measured. Not the same as failing, and reported as
+    /// its own thing: a run whose provider was down all morning must not read as
+    /// a model that lost its touch, and must not read as green either.
+    /// </summary>
+    [JsonIgnore]
+    public bool NotJudged => Judged.Count == 0;
+
+    [JsonIgnore]
+    public int Errors => Attempts.Count(a => a.Errored);
 
     /// <summary>
     /// True when the attempts disagreed with each other. Named separately from
@@ -63,10 +92,10 @@ public sealed record EvalResult(
     /// four is a prompt that is not firm enough or an assertion that is too tight.
     /// </summary>
     [JsonIgnore]
-    public bool Moved => Attempts.Count > 1 && Attempts.Select(a => a.Passed).Distinct().Count() > 1;
+    public bool Moved => Judged.Count > 1 && Judged.Select(a => a.Passed).Distinct().Count() > 1;
 
     [JsonIgnore]
-    public string? FirstFailure => Attempts.FirstOrDefault(a => !a.Passed)?.Failure;
+    public string? FirstFailure => Judged.FirstOrDefault(a => !a.Passed)?.Failure;
 }
 
 /// <summary>

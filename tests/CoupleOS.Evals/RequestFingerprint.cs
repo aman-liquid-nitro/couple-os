@@ -69,8 +69,9 @@ public static class RequestFingerprint
 public static class EvalCatalogueVersion
 {
     /// <summary>
-    /// gemma4:31b, CapturePrompt 2026-08-14.1, eight tools.
+    /// CapturePrompt 2026-08-13.1, eight tools, with create_expense's `paid_by`
+    /// carrying an example on both sides of the pair it was getting wrong.
     /// Update deliberately, with the eval run that justifies it.
     /// </summary>
-    public const string Current = "unset";
+    public const string Current = "a55fa841";
 }

@@ -1,5 +1,7 @@
 using CoupleOS.AI.DependencyInjection;
+using CoupleOS.Application.Capture;
 using CoupleOS.Application.Tools;
+using CoupleOS.Evals;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
@@ -8,24 +10,23 @@ using Xunit.Abstractions;
 namespace CoupleOS.AITests.Evals;
 
 /// <summary>
-/// Reports how much of the eval set can actually run.
+/// What the extraction harness is actually asking a model, and whether every
+/// case it claims can be asked.
 ///
-/// Without this, a harness that executes four of fifty-five cases looks
-/// identical to one that executes all of them: green. The untested remainder
-/// would become a blind spot that feels like coverage — which is the same
-/// failure this project has hit repeatedly, silence read as success.
+/// The question this file existed to answer through M0–M3 — how many of the 55
+/// cases can run at all — is answered by <c>EvalSetTests</c> now, over the file
+/// rather than over the tool registry, and the answer is all of them. What is
+/// left here is the half that still depends on what is registered: a case whose
+/// required tool does not exist can be declared for extraction and will fail for
+/// a reason that has nothing to do with the model.
 /// </summary>
 public sealed class EvalCoverage(ITestOutputHelper output)
 {
     private readonly ITestOutputHelper _output = output;
 
-    [Fact]
-    public void The_share_of_the_eval_set_that_can_run_is_reported_and_meets_M0s_bar()
-    {
-        var configuration = new ConfigurationBuilder().AddInMemoryCollection([]).Build();
-
-        using var provider = new ServiceCollection()
-            .AddOllamaProvider(configuration)
+    private static ServiceProvider BuildProvider() =>
+        new ServiceCollection()
+            .AddOllamaProvider(new ConfigurationBuilder().AddInMemoryCollection([]).Build())
             .AddCoupleOsTools()
             .AddSingleton<IShoppingItemWriter, NullShoppingItemWriter>()
             .AddSingleton<ITaskWriter, NullTaskWriter>()
@@ -39,35 +40,78 @@ public sealed class EvalCoverage(ITestOutputHelper output)
             .AddSingleton<IToolAuditSink, NullAuditSink>()
             .BuildServiceProvider();
 
+    /// <summary>
+    /// A case that requires a tool nobody registered is red for a reason the
+    /// model cannot fix, and its redness would be read as extraction quality.
+    /// The eval set names such tools in <c>unsupported_tools</c> instead, where
+    /// they are an assertion rather than an accident.
+    /// </summary>
+    [Fact]
+    public void No_extraction_case_requires_a_tool_that_is_not_registered()
+    {
+        using var provider = BuildProvider();
+
         var registered = provider.GetRequiredService<IToolRegistry>().All.Select(t => t.Name).ToHashSet();
-        var cases = EvalCaseLoader.Load();
 
-        var withTools = cases.Where(c => c.ExpectedTools.Count > 0).ToList();
-        var runnable = withTools.Where(c => c.ExpectedTools.All(t => registered.Contains(t.Name))).ToList();
-
-        var missing = withTools
-            .SelectMany(c => c.ExpectedTools.Select(t => t.Name))
-            .Where(name => !registered.Contains(name))
-            .GroupBy(name => name)
-            .OrderByDescending(g => g.Count())
+        var unavailable = EvalCaseLoader.For(EvalHarness.Extraction)
+            .SelectMany(c => c.ExpectedTools.Select(t => (c.Id, t.Name)))
+            .Where(x => !registered.Contains(x.Name))
+            .Select(x => $"{x.Id} requires {x.Name}")
             .ToList();
 
-        _output.WriteLine($"eval cases            : {cases.Count}");
-        _output.WriteLine($"cases expecting tools : {withTools.Count}");
-        _output.WriteLine($"runnable today        : {runnable.Count}");
-        _output.WriteLine($"registered tools      : {string.Join(", ", registered.OrderBy(n => n))}");
-        _output.WriteLine("");
-        _output.WriteLine("blocked on tools that do not exist yet:");
+        Assert.True(
+            unavailable.Count == 0,
+            "These cases require tools that are not registered, so they measure the catalogue rather " +
+            "than the model. Name the tool in `unsupported_tools` and assert what V0 should do " +
+            "instead: " + string.Join("; ", unavailable));
+    }
 
-        foreach (var group in missing)
+    /// <summary>
+    /// The other direction, and the one that goes stale on its own: a tool named
+    /// as unsupported that has since been built. The case is then asserting the
+    /// absence of a call the model is entitled to make.
+    /// </summary>
+    [Fact]
+    public void No_case_calls_a_tool_unsupported_that_has_since_been_registered()
+    {
+        using var provider = BuildProvider();
+
+        var registered = provider.GetRequiredService<IToolRegistry>().All.Select(t => t.Name).ToHashSet();
+
+        var overtaken = EvalCaseLoader.Load()
+            .SelectMany(c => (c.Expect?.UnsupportedTools ?? []).Select(name => (c.Id, Name: name)))
+            .Where(x => registered.Contains(x.Name))
+            .Select(x => $"{x.Id} calls {x.Name} unsupported")
+            .ToList();
+
+        Assert.True(
+            overtaken.Count == 0,
+            $"These tools exist now, so the cases need rewriting to the contract they have: " +
+            string.Join("; ", overtaken));
+    }
+
+    /// <summary>
+    /// Prints what the model is being asked, so a later run can tell "the model
+    /// got worse" from "somebody reworded a schema" (STATUS debt 42).
+    /// </summary>
+    [Fact]
+    public void The_request_the_eval_set_judges_is_reported()
+    {
+        using var provider = BuildProvider();
+
+        var tools = provider.GetRequiredService<IToolRegistry>().All;
+        var fingerprint = RequestFingerprint.Of(CapturePrompt.Version, CapturePrompt.System, tools);
+
+        _output.WriteLine($"prompt version : {CapturePrompt.Version}");
+        _output.WriteLine($"catalogue      : {tools.Count} tools");
+        _output.WriteLine($"fingerprint    : {fingerprint}");
+        _output.WriteLine("");
+
+        foreach (var tool in tools.OrderBy(t => t.Name, StringComparer.Ordinal))
         {
-            _output.WriteLine($"  {group.Count(),3}  {group.Key}");
+            _output.WriteLine($"  {tool.Name,-24}{tool.ParametersSchema.GetRawText().Length,6} bytes of schema");
         }
 
-        // M0 asks for three cases wired in. The gate rises as tools land: M3
-        // adds the remaining six, and this number should climb with it.
-        Assert.True(
-            runnable.Count >= 3,
-            $"M0 requires at least three eval cases to run; {runnable.Count} can.");
+        Assert.NotEmpty(tools);
     }
 }

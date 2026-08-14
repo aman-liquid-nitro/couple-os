@@ -43,6 +43,36 @@ public sealed record EvalCase
         new Dictionary<string, string>(StringComparer.Ordinal);
 
     /// <summary>
+    /// Set when the case states a contract the system does not meet, with the
+    /// reason and the entry that tracks it.
+    ///
+    /// <para>Not a way to make a red case green. The harness runs it exactly as
+    /// it runs any other, records the real result, and the gate scores it as the
+    /// failure it is — so a threshold cannot be met by declaring the failures
+    /// away. What the marker changes is the assertion: the harness asserts the
+    /// case <b>still</b> fails, so the day the gap is closed the build says so
+    /// and the marker has to come off. A known failure that quietly starts
+    /// passing is how a fixed thing gets fixed twice, and how an unfixed thing
+    /// keeps its excuse.</para>
+    ///
+    /// <para>It exists because M4 found two kinds of red that a milestone about
+    /// gates must not paper over: an expectation the code has never satisfied
+    /// (<c>dedup-001</c> — nothing deduplicates shopping items), and a model
+    /// weakness worth deciding about rather than patching mid-milestone.</para>
+    /// </summary>
+    /// <para><b>Keyed by harness</b>, and that is not bookkeeping. <c>dedup-001</c>
+    /// is the case that proves it: the model's half is correct and passes every
+    /// time — it calls <c>create_shopping_item</c> — and the database's half
+    /// fails, because nothing deduplicates the row. A single flag would have
+    /// marked the passing half as known-bad and then failed for passing.</para>
+    [JsonPropertyName("known_failure")]
+    public IReadOnlyDictionary<string, string> KnownFailure { get; init; } =
+        new Dictionary<string, string>(StringComparer.Ordinal);
+
+    public string? KnownFailureOn(EvalHarness harness) =>
+        KnownFailure.TryGetValue(EvalHarnessNames.Of(harness), out var reason) ? reason : null;
+
+    /// <summary>
     /// The expectation object exactly as written.
     ///
     /// The raw element is what is bound, and <see cref="Expect"/> is projected

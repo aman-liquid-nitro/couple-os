@@ -36,7 +36,7 @@ public sealed class ToolCatalogueTests
     /// <c>ITool</c> from the container is what makes this a test of what ships
     /// rather than of a list of types someone kept up to date.
     /// </summary>
-    private static List<ITool> Registered()
+    internal static List<ITool> Registered()
     {
         var services = new ServiceCollection();
 

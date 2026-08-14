@@ -63,9 +63,21 @@ public sealed class CreateExpenseTool(
         string.Join(",", SeededCategories.Select(c => $"\"{c}\"")) + "]}," +
         "\"merchant\":{\"type\":\"string\",\"description\":\"Where, if the person said\",\"maxLength\":200}," +
         "\"paid_by\":{\"type\":\"string\",\"enum\":[\"me\",\"partner\",\"unknown\"]," +
+        // One example each side, for the pair that is actually confused.
+        //
+        // This description used to give an example for 'me' and none for
+        // 'unknown', and the asymmetry did what an asymmetry does: "Dinner was
+        // 2400." — a sentence with no person in it at all — came back as
+        // paid_by: "me". Found by amb-002 on the first run in which it was ever
+        // executed, which is the whole argument for M4.
+        //
+        // Deliberately not longer. M3 established that lengthening a description
+        // can be strictly worse — spelling out all eight memory types made the
+        // model omit the field entirely — and that the fix is to discriminate the
+        // one pair being got wrong.
         "\"description\":\"'me' when the person says they spent or paid it — 'I spent 2400 on dinner' says 'me'. " +
-        "'partner' when they say the other person did. 'unknown' only when the note genuinely does not say; " +
-        "never guess between the two people.\"}," +
+        "'partner' when they say the other person did. 'unknown' when the note names nobody — " +
+        "'Dinner was 2400' says 'unknown'. Never guess which of the two people it was.\"}," +
         "\"is_shared\":{\"type\":\"boolean\",\"description\":\"False for something bought for the other person, or purely personal\"}," +
         "\"occurred_expression\":{\"type\":\"string\"," +
         "\"description\":\"When it happened, copied exactly as the person wrote it: 'yesterday', 'on Friday'. Omit for today.\"," +

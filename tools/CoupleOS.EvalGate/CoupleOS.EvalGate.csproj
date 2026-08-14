@@ -1,0 +1,23 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- The gate. Reads what the three harnesses recorded and decides whether the
+       milestone still holds.
+
+       A separate process rather than a test, for a reason the alternative makes
+       obvious: the harnesses run in three test projects, xUnit has no way to
+       aggregate a verdict across them, and the nearest fake — a collection
+       fixture asserting thresholds on dispose — would put the decision inside a
+       teardown, which is the one place a failure is easiest to miss. Running the
+       tests and then running this is also what a CI job looks like anyway. -->
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <IsPackable>false</IsPackable>
+    <RootNamespace>CoupleOS.EvalGate</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\tests\CoupleOS.Evals\CoupleOS.Evals.csproj" />
+  </ItemGroup>
+
+</Project>
