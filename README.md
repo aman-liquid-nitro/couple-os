@@ -2,12 +2,14 @@
 
 A private, intelligent memory and coordination layer for a couple's everyday life.
 
-**Status:** M0 and M1 complete. Two people sign in with no password anywhere in
-the system, form a couple, and each write to it as themselves — a note typed
-into a page becomes rows, under row-level security, with an audit trail and a
-change report.
-**Next target:** V0 (see [docs/V0_SCOPE.md](./docs/V0_SCOPE.md)) — not the roadmap.
-**Next step:** M2, capture surfaces — see [docs/IMPLEMENTATION_PLAN.md](./docs/IMPLEMENTATION_PLAN.md).
+**Status:** V0 is built. All five milestones are met and the done-checklist in
+[docs/V0_SCOPE.md](./docs/V0_SCOPE.md) is fourteen of fourteen, each box naming
+what asserts it. Two people sign in with no password anywhere in the system,
+form a couple, and each write to it as themselves — a note typed into a page or
+a phone becomes rows, under row-level security, through seven tools, with an
+audit trail and a change report.
+**Next step:** the week of real use. V0 is *done*; whether it is *validated* is
+a different bar and the same file states it. See [docs/DEPLOY.md](./docs/DEPLOY.md).
 
 ## Start here
 
@@ -17,7 +19,9 @@ change report.
 | [docs/IMPLEMENTATION_PLAN.md](./docs/IMPLEMENTATION_PLAN.md) | How V0 gets built — milestones, exit criteria, risks |
 | [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md) | Shape of the system, domain model, request pipeline |
 | [docs/TOOLS.md](./docs/TOOLS.md) | Contracts for the seven V0 tools |
-| [decisions/](./decisions) | Why things are the way they are (ADRs 0001–0013) |
+| [docs/SETUP.md](./docs/SETUP.md) | Setting up the week on a Windows laptop, from `git clone` to both phones, assuming no prior knowledge |
+| [docs/DEPLOY.md](./docs/DEPLOY.md) | The same thing for someone who knows the stack — plus backups and what each choice costs |
+| [decisions/](./decisions) | Why things are the way they are (ADRs 0001–0014) |
 | [docs/SPEC.md](./docs/SPEC.md) | The original full specification |
 
 ## Where things live

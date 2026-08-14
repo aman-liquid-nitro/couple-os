@@ -8,11 +8,17 @@
 # ============================================================================
 
 # --- Build -----------------------------------------------------------------
-# global.json pins 10.0.302 with rollForward: latestFeature. The floating 10.0
-# tag currently carries 10.0.400, which satisfies it. If a future tag ever
-# drops below the pinned feature band the SDK refuses to run at all, which is
-# the correct failure: loud, at build time, naming the version it wanted.
-FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
+# global.json pins 10.0.302 with rollForward: latestFeature, and this digest
+# carries 10.0.400, which satisfies it. If a future tag ever drops below the
+# pinned feature band the SDK refuses to run at all, which is the correct
+# failure: loud, at build time, naming the version it wanted.
+#
+# Pinned by digest as of 2026-08-14 (STATUS debt 14). The tag is kept beside it
+# for readability only — Docker resolves the digest and ignores the tag, so the
+# two cannot disagree in a way that changes the build. The cost is that security
+# patches now arrive when someone re-pins rather than on the next build, which is
+# the trade a deployment wants and a laptop does not.
+FROM mcr.microsoft.com/dotnet/sdk:10.0@sha256:e1fc6e423f543119c406d24e2e687d67c569f18f04a37a8b0005d80ad0dcee80 AS build
 WORKDIR /src
 
 # Restore before the sources, so editing a .cs file does not re-resolve the
@@ -43,7 +49,7 @@ RUN dotnet publish src/CoupleOS.Api/CoupleOS.Api.csproj \
       --output /app
 
 # --- Runtime ---------------------------------------------------------------
-FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
+FROM mcr.microsoft.com/dotnet/aspnet:10.0@sha256:207cc51496778557731c81ff670333d8ade4a4fec22768fd1be8e78474a84ecf AS runtime
 
 # The image ships no HTTP client — no curl, no wget, no netcat (verified
 # against aspnet:10.0 on Ubuntu 24.04). Without one, HEALTHCHECK has nothing

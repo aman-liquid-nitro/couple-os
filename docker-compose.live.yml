@@ -1,0 +1,55 @@
+# ============================================================================
+# Couple OS — the validation run, self-hosted behind Tailscale
+#
+#   docker compose -f docker-compose.yml -f docker-compose.live.yml up -d --build
+#
+# See docs/DEPLOY.md for the whole procedure. This file holds only what differs
+# from development, and every difference is here because leaving it at the
+# development value would be wrong in front of two real people rather than
+# merely untidy.
+#
+# Nothing in this file publishes a port. BIND_ADDRESS=127.0.0.1 in .env is what
+# keeps the stack off every interface, and `tailscale serve` is what makes it
+# reachable — so the tailnet is the only network that can see it, and the ACL
+# is Tailscale's rather than Docker's.
+# ============================================================================
+
+services:
+  db:
+    # A week is long enough to contain a reboot.
+    restart: unless-stopped
+
+  maildev:
+    restart: unless-stopped
+
+  api:
+    restart: unless-stopped
+    environment:
+      # Development would serve the developer exception page — a stack trace,
+      # a connection string and the query that threw, to whoever hit the error.
+      # It also selects DevelopmentEmailSender, which logs the magic link in
+      # plain text to the container log alongside sending it.
+      ASPNETCORE_ENVIRONMENT: Production
+
+      # `tailscale serve` terminates TLS on the host and forwards over plain
+      # HTTP, so without this the application sees scheme=http and behaves as if
+      # the connection were insecure. A framework variable, not one this project
+      # reads: ASP.NET adds the forwarded-headers middleware itself, for
+      # X-Forwarded-For and X-Forwarded-Proto, with no known-proxy list. That
+      # last part is only safe because of the binding above — the sole thing
+      # that can reach port 8080 is the proxy on the same host.
+      ASPNETCORE_FORWARDEDHEADERS_ENABLED: "true"
+
+      # STATUS debt 17. Without it a magic link's URL is built from the request's
+      # own Host header, which is attacker-controlled: a request forged with
+      # someone else's host mints a link pointing there, and the recipient hands
+      # over a token that signs them in. Required rather than defaulted, because
+      # a wrong value here is a working application that issues links nobody can
+      # use, and an absent one is a security property quietly switched off.
+      PublicBaseUrl: ${PUBLIC_BASE_URL:?set PUBLIC_BASE_URL in .env — every magic link URL is minted from it}
+
+      # ADR 0013's hosted service. Required for the same reason: an empty key
+      # selects the local instance, so a typo here does not fail, it silently
+      # runs the week on the 4b development model and ADR 0011 says that verdict
+      # would mean nothing.
+      Llm__Ollama__ApiKey: ${OLLAMA_API_KEY:?set OLLAMA_API_KEY in .env — an empty key silently falls back to local inference}

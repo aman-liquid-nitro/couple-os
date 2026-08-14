@@ -284,8 +284,9 @@ then reconciled line by line against what the suites assert, and came out twelve
 of fourteen: no seeded memory corpus (STATUS debt 47) and no stored tool output
 in `ai_actions` (debt 48). The corpus was then built — 104 memories, and the
 first thing it did was find two ranking defects nobody could have seen on a
-corpus of two (debts 50 and 51). Thirteen of fourteen, and what is left is named
-rather than rounded up. What V0 is not is validated — that is what the week is for, and
+corpus of two (debts 50 and 51). Debt 48 was then paid — `ai_actions.result` now
+stores what a tool reported, which is the column the two tools that write nothing
+had no substitute for. **Fourteen of fourteen.** What V0 is not is validated — that is what the week is for, and
 the bar it is measured against is in V0_SCOPE.md rather than here.
 
 ---
@@ -320,4 +321,6 @@ None are cut because they are unimportant.
 1. ~~**CI.**~~ **Settled: no CI, deliberately.** The gate is `scripts/check.sh` (and `check.ps1`), run on demand. A hosted runner was built at M4 and removed: it bought two things, and only one of them was worth the price. It runs when you forget — which is real — and it runs on a clean machine, which is the half that has actually caught defects. What it does not buy is the usual reason for it, because there is no team to coordinate and no pull-request flow to block. Against that, the eval job calls a hosted model on every push to every branch, for a suite whose own design says a run is a sample rather than a verdict. One person, one machine, one command.
 
    The clean-machine half is what is genuinely given up, and it is given up knowingly: two of M5's defects were a stale Docker volume and a form that only worked because the browser already held a token, and neither would survive a build from nothing. `docker compose down -v` before a run that matters is the manual version.
-2. **Deployment target.** Deferred to M5 by decision. The candidates are a cloud VPS or self-hosting behind Tailscale; the latter fits SPEC.md §40's privacy stance and costs nothing.
+2. ~~**Deployment target.**~~ **Settled: self-hosted behind Tailscale.** The candidates were a cloud VPS or a machine the couple owns; the latter fits SPEC.md §40's stance, costs nothing, and removes public TLS, a domain and a firewall from the list of things that can be got wrong before the week starts. The procedure is [DEPLOY.md](./DEPLOY.md) and it needed no application code — `ASPNETCORE_FORWARDEDHEADERS_ENABLED` is a framework variable, and the rest is `.env` plus `docker-compose.live.yml`.
+
+   What it costs is stated where it is felt rather than here: the host has to stay awake, and a laptop that sleeps is an outage in a week measuring whether people capture things in doorways. The other two live decisions went with it — magic links keep coming from maildev, read over the tailnet, and the model is Ollama's hosted `gemma4:31b` (ADR 0013) rather than Anthropic. The second is the one that bounds the verdict: ADR 0011 says a weak model's failure is ambiguous, so a *good* week is conclusive and a poor one is not.
