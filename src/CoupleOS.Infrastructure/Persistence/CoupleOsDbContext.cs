@@ -112,10 +112,15 @@ public sealed class CoupleOsDbContext(DbContextOptions<CoupleOsDbContext> option
             e.Property(x => x.DueAt).HasColumnName("due_at");
             e.Property(x => x.CommittedToUserId).HasColumnName("committed_to_user_id");
 
-            // status, source, created_at, updated_at and the rest keep their
-            // database defaults, as shopping_items does. status is the one worth
-            // naming: every task starts 'todo', and mapping the column would let
-            // a future entity default disagree with the schema about that.
+            // Mapped now, and it was the omission debt 39 records: the column
+            // defaults to 'chat', so every task typed into shared.md claimed the
+            // provenance of a conversation.
+            e.Property(x => x.Source).HasColumnName("source");
+
+            // status, created_at, updated_at and the rest keep their database
+            // defaults, as shopping_items does. status is the one worth naming:
+            // every task starts 'todo', and mapping the column would let a future
+            // entity default disagree with the schema about that.
         });
 
         b.Entity<CalendarEvent>(e =>
@@ -134,6 +139,7 @@ public sealed class CoupleOsDbContext(DbContextOptions<CoupleOsDbContext> option
             e.Property(x => x.Location).HasColumnName("location");
             e.Property(x => x.RecurrenceRule).HasColumnName("recurrence_rule");
             e.Property(x => x.Category).HasColumnName("category");
+            e.Property(x => x.Source).HasColumnName("source");
         });
 
         b.Entity<Expense>(e =>
@@ -156,6 +162,7 @@ public sealed class CoupleOsDbContext(DbContextOptions<CoupleOsDbContext> option
             e.Property(x => x.Merchant).HasColumnName("merchant");
             e.Property(x => x.PaidBy).HasColumnName("paid_by");
             e.Property(x => x.IsShared).HasColumnName("is_shared");
+            e.Property(x => x.Source).HasColumnName("source");
 
             // A date, not a timestamp. Writing a timestamptz here would be silently
             // truncated by PostgreSQL and the truncation would use UTC.

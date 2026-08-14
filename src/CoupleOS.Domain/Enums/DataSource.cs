@@ -1,17 +1,17 @@
 namespace CoupleOS.Domain.Enums;
 
 /// <summary>
-/// The <c>data_source</c> enum — how a row came to exist. Five tables carry it and
-/// all five default it to <c>chat</c>.
+/// The <c>data_source</c> enum — how a row came to exist. Four tables carry it and
+/// all four default it to <c>chat</c>.
 ///
-/// Mapped because <c>create_memory</c> is the first tool to write it deliberately.
-/// The default is wrong for the shared file and was wrong before this enum
-/// existed: every task, event and expense written from <c>shared.md</c> claims
-/// <c>chat</c>, because no tool maps the column and the database default fills it
-/// in. That is STATUS debt 39, and it is paid here for memories alone rather than
-/// across five tables mid-milestone — a memory is the row whose provenance is
-/// actually read back, since ADR 0006 requires an inferred one to be surfaced with
-/// where it came from.
+/// The default is wrong for the shared file, and for three milestones only
+/// <c>create_memory</c> overrode it — so every task, event and expense typed into
+/// <c>shared.md</c> claimed the provenance of a conversation that never happened
+/// (STATUS debt 39). Paid across all four now, from one place
+/// (<c>ToolSource</c>), and the property is <c>required</c> on every entity that
+/// carries it: the CLR default here is <see cref="UserInput"/> where the column's
+/// is <see cref="Chat"/>, so an omission would not inherit the schema's answer,
+/// it would silently contradict it.
 ///
 /// <see cref="UserInput"/> is a person typing into a file or a form;
 /// <see cref="Chat"/> is a conversational turn. The distinction is the capture

@@ -35,6 +35,18 @@ public sealed class TaskItem
 
     public required Visibility Visibility { get; init; }
 
+    /// <summary>
+    /// Where this row came from, from the surface that produced it
+    /// (<see cref="CoupleOS.Application.Tools.ToolSource"/>).
+    ///
+    /// <c>required</c> rather than defaulted, for the reason Memory.Source is:
+    /// the CLR default for this enum is <c>user_input</c> where the column's is
+    /// <c>chat</c>, so an omission here would not inherit the schema's answer, it
+    /// would silently contradict it — which is exactly what happened for three
+    /// milestones (STATUS debt 39).
+    /// </summary>
+    public required DataSource Source { get; init; }
+
     public required TaskItemKind Kind { get; init; }
 
     public required string Title { get; init; }

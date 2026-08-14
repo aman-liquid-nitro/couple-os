@@ -249,6 +249,7 @@ public sealed class CreateEventTool(IEventWriter writer, ICoupleClock clock) : I
             CoupleId = context.CoupleId,
             OwnerUserId = context.Visibility == Visibility.PrivateUser ? context.UserId : null,
             Visibility = context.Visibility,
+            Source = ToolSource.Of(context.Visibility),
             Title = arguments.GetProperty("title").GetString()!.Trim(),
             StartsAt = startsAt,
             EndsAt = endsAt,

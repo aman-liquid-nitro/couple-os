@@ -175,6 +175,7 @@ public sealed class CreateTaskTool(
             CoupleId = context.CoupleId,
             OwnerUserId = context.Visibility == Visibility.PrivateUser ? context.UserId : null,
             Visibility = context.Visibility,
+            Source = ToolSource.Of(context.Visibility),
             Kind = kind,
             Title = arguments.GetProperty("title").GetString()!.Trim(),
             Description = Text(arguments, "description"),

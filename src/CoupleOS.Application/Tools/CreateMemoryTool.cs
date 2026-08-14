@@ -252,7 +252,7 @@ public sealed class CreateMemoryTool(IMemoryWriter writer, ICoupleClock clock) :
             Visibility = context.Visibility,
             Type = type,
             Assertion = assertion,
-            Source = SourceOf(context.Visibility),
+            Source = ToolSource.Of(context.Visibility),
             Confidence = Math.Round(confidence, 2, MidpointRounding.AwayFromZero),
             Content = content,
             SubjectKey = subjectKey,
@@ -353,9 +353,6 @@ public sealed class CreateMemoryTool(IMemoryWriter writer, ICoupleClock clock) :
     /// and the fix then is a surface on <c>ToolExecutionContext</c>, not a cleverer
     /// reading of this column.
     /// </summary>
-    private static DataSource SourceOf(Visibility visibility) =>
-        visibility == Visibility.PrivateUser ? DataSource.Chat : DataSource.UserInput;
-
     private static string Describe(ToolDate date) =>
         date.Local is { } local
             ? local.ToString("d MMM yyyy", CultureInfo.InvariantCulture)

@@ -275,6 +275,7 @@ public sealed class CreateExpenseTool(
             CoupleId = context.CoupleId,
             OwnerUserId = context.Visibility == Visibility.PrivateUser ? context.UserId : null,
             Visibility = context.Visibility,
+            Source = ToolSource.Of(context.Visibility),
             Amount = stored,
             Currency = (Text(arguments, "currency") ?? "INR").ToUpperInvariant(),
             CategoryId = categoryId,

@@ -115,6 +115,7 @@ public sealed class CreateReminderTool(ITaskWriter writer, ICoupleClock clock) :
             CoupleId = context.CoupleId,
             OwnerUserId = context.Visibility == Visibility.PrivateUser ? context.UserId : null,
             Visibility = context.Visibility,
+            Source = ToolSource.Of(context.Visibility),
             Kind = TaskItemKind.Reminder,
             Title = arguments.GetProperty("title").GetString()!.Trim(),
 
