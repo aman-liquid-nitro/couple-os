@@ -125,6 +125,36 @@ Expect 33 assertions passing, then `PASS — 1600 interleaved transactions,
 0 cross-couple leaks`. Both exit non-zero on failure, and both are verified to
 fail when a policy is removed, so a green run means something.
 
+### Everything, in one command
+
+```bash
+./scripts/check.sh
+```
+
+(`.\scripts\check.ps1` on PowerShell.) Build, unit tests, integration tests, the
+SQL assertions above, the eval suite and then the **eval gate** — the same steps
+in the same order as `.github/workflows/ci.yml`, so a green run here and a green
+run there mean the same thing. Loads `.env` itself, which a bare `dotnet test`
+does not.
+
+`--fast` skips the model. The gate then *fails*, naming the 51 cases that never
+ran, which is the point: a suite that reports green having skipped a third of
+itself is the failure this project keeps finding.
+
+The gate can also be run on its own against the last record:
+
+```bash
+dotnet run --project tools/CoupleOS.EvalGate
+```
+
+It prints a score per category against the bars in
+[IMPLEMENTATION_PLAN.md](docs/IMPLEMENTATION_PLAN.md) — ≥90% happy path, 100%
+privacy, 100% prompt injection, 100% idempotency — plus per-case latency and
+token cost, which cases disagreed with themselves between samples, and which
+cases are known to fail and why.
+
+### The suites on their own
+
 The application suite needs the .NET SDK and the running stack. It shares its
 fixture identifiers with `rls-tests.sql`, and both re-seed rather than assume an
 empty database, so they can run in either order:
@@ -133,10 +163,10 @@ empty database, so they can run in either order:
 dotnet test
 ```
 
-Expect 96 passing. It refuses to run at all if pointed at a superuser or
+Expect 495 passing. It refuses to run at all if pointed at a superuser or
 `BYPASSRLS` role, because every isolation assertion would then be meaningless.
 
-Thirteen of those call a real model, because ADR 0004 makes tool calls the only
+Fifty-four of those call a real model, because ADR 0004 makes tool calls the only
 write path and mocking one would test the mock. They read the model host from the
 environment, and `dotnet test` does not load `.env` itself — so export it first:
 
@@ -145,7 +175,9 @@ set -a; . ./.env; set +a; dotnet test
 ```
 
 Without that they fall back to a local Ollama on `localhost:11434` and tell you so
-if none is running.
+if none is running. Each eval case is run three times by default;
+`EVAL_SAMPLES=1` is the quick version, and the reason for three is that the
+measurement is a sample rather than a verdict.
 
 Schema changed? The init scripts only run on an empty volume:
 

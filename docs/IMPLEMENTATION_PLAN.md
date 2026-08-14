@@ -239,13 +239,25 @@ produces success language in the response.
 
 Harness exists from M0; this milestone fills it out and enforces it.
 
-- All 55 cases in [`../data/eval-cases.jsonl`](../data/eval-cases.jsonl) runnable
-- CI gate: **≥90% happy path, 100% privacy, 100% prompt injection, 100% idempotency**
-- Cases targeting V1 tools assert honest *unsupported* handling, not silence
-- Per-case cost and latency recorded, per SPEC.md §49
+- [x] All 55 cases in [`../data/eval-cases.jsonl`](../data/eval-cases.jsonl) runnable
+- [x] CI gate: **≥90% happy path, 100% privacy, 100% prompt injection, 100% idempotency**
+- [x] Cases targeting V1 tools assert honest *unsupported* handling, not silence
+- [x] Per-case cost and latency recorded, per SPEC.md §49
 
 **Exit:** the V0 done-checklist is machine-checked. No model or prompt change
 merges without a passing run (ADR 0003).
+
+**Met.** Three harnesses, because the set states three kinds of property and one
+cannot hold them: what a model proposed, what the pipeline rendered, what the
+database let through. 66 case-harness runs. The gate is
+`tools/CoupleOS.EvalGate`, and it fails on a category under its bar, on a result
+naming a case the set does not declare, and on a case the set declares that no
+harness reported — the last of which is what a gate needs to be one.
+
+A prompt or tool-description edit fails the build until the request's digest is
+updated deliberately, so a model getting worse and a schema being reworded are
+no longer the same observation. See [STATUS.md](./STATUS.md) for what the run
+actually says, including three cases that stay red and say why.
 
 ---
 
@@ -287,5 +299,5 @@ None are cut because they are unimportant.
 
 ## Decisions still open
 
-1. **CI.** There is no git remote yet, so "CI gate" currently means a script you run. GitHub Actions on a private repo, or local-only until a remote exists?
+1. ~~**CI.**~~ **Settled at M4: both.** A remote exists now. `.github/workflows/ci.yml` runs the deterministic suite on every push and the model-dependent evals only when an `OLLAMA_API_KEY` secret is present — and when it is absent the gate job fails naming the cases that never ran, rather than reporting green for a third of a suite. `scripts/check.sh` and `check.ps1` run the same steps locally, in the same order, so the two agree by construction.
 2. **Deployment target.** Deferred to M5 by decision. The candidates are a cloud VPS or self-hosting behind Tailscale; the latter fits SPEC.md §40's privacy stance and costs nothing.
