@@ -64,6 +64,8 @@ Conversational, synchronous, one thread per partner. This is where surprises, gi
 
 Every record it creates is `private_user`, owned by the speaker. There is no way to write a shared record from a private thread except by calling `share_memory`, which is `confirm`-tier (ADR 0008) and warns that sharing is effectively irreversible.
 
+> **`share_memory` was never built, and V0 shipped without it.** TOOLS.md tiers it V1; this paragraph and V0_SCOPE read as though it exists. The decision above is unaffected — the direction that must stay closed is closed, and it is closed harder than described, because the door has no handle rather than a confirmed one. What the couple loses is the way *out*: something worked out privately can only reach shared state by being retyped into `shared.md`. Tracked as STATUS debt 49.
+
 Clarifying questions happen in-band here, as SPEC.md §3.2 intended, because there is a person present and no coordination cost to interrupting them.
 
 ### Cross-cutting

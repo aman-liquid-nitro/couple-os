@@ -65,7 +65,7 @@ Per ADR 0002 the `vector` extension is enabled and `memories.embedding` exists a
 - Conversational, immediate, in-band clarifying questions (SPEC.md §3.2)
 - Where surprises, gifts and personal goals live (SPEC.md §19)
 - Everything captured here is `private_user`, by construction
-- `share_memory` is the only path from here to shared state, and it confirms
+- ~~`share_memory` is the only path from here to shared state, and it confirms~~ — **not built; see the cut table below.** Left struck through rather than deleted, because three documents described it as present
 
 **Both surfaces**
 - Intent classification against SPEC.md §7's enum
@@ -117,6 +117,7 @@ Cut, with the reason. Nothing here is cut because it is unimportant.
 | All integrations (§39) | Explicitly V3. |
 | Mobile app, voice, WhatsApp, OCR | Explicitly later. |
 | Multi-couple, family mode | SPEC.md §4 defers it; the schema does not preclude it. |
+| `share_memory` — promoting a private memory to shared | **Cut by accident and then noticed.** This document listed it in scope and ADR 0009 named it as the private thread's one exit; TOOLS.md tiers it V1, and V1 is where it stayed. Nothing was blocked on it because the seven registered tools all write to the surface they were called from, so no code ever wanted it. The consequence is one-directional and survivable for a week: private reads shared, shared never reads private, and now private cannot *promote* either — a plan worked out in the thread reaches the couple by being retyped. STATUS debt 49. |
 
 ---
 
