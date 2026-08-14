@@ -263,12 +263,25 @@ actually says, including three cases that stay red and say why.
 
 ## M5 · Attachments and read surface
 
-- Upload, checksum, store, link to the entities its block produced
-- Attachments inherit their surface's scope; `ocr_status` stays `not_attempted`
-- Flat read view grouped by type, so a user can verify what was understood
+- [x] Upload, checksum, store, link to the entities its block produced
+- [x] Attachments inherit their surface's scope; `ocr_status` stays `not_attempted`
+- [x] Flat read view grouped by type, so a user can verify what was understood
 
 **Exit:** V0 complete. One week of real use begins, measured against the
 "Definition of validated" bar in [V0_SCOPE.md](./V0_SCOPE.md).
+
+**Met.** Bytes on a named volume behind an interface ([ADR 0014](../decisions/0014-attachment-storage-on-the-filesystem.md)),
+hashed while streaming, written under a temporary name and moved. Both surfaces
+receive uploads and neither decides the scope from the file — the shared page
+passes `shared_couple` and the private thread passes `private_user`, which is the
+whole of ADR 0009's rule stated twice. The link carries the attachment's id
+rather than its filename, so one implementation writes it and one reads it back,
+and a Process links it to every record its block produced.
+
+`/Captured` is the read surface: rows grouped by kind, private ones marked, no
+totals anywhere. **V0 is complete.** What it is not is validated — that is what
+the week of real use is for, and the bar it is measured against is in
+V0_SCOPE.md rather than here.
 
 ---
 

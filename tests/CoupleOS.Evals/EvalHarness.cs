@@ -108,6 +108,13 @@ public static class EvalKeys
         "response_must_not_state_as_fact",
         "response_must_state_no_data",
         "response_must_not_estimate",
+
+        // M5. All three were deferred through M4 with "there are no attachments
+        // yet", which was true and is the kind of deferral that has to be taken
+        // off the moment it stops being.
+        "attachment_linked_to_entity",
+        "attachment_visibility",
+        "ocr_attempted",
     };
 
     /// <summary>

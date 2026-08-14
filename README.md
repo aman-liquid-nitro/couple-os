@@ -163,7 +163,7 @@ empty database, so they can run in either order:
 dotnet test
 ```
 
-Expect 495 passing. It refuses to run at all if pointed at a superuser or
+Expect 509 passing. It refuses to run at all if pointed at a superuser or
 `BYPASSRLS` role, because every isolation assertion would then be meaningless.
 
 Fifty-four of those call a real model, because ADR 0004 makes tool calls the only
@@ -184,6 +184,15 @@ Schema changed? The init scripts only run on an empty volume:
 ```bash
 docker compose down -v && docker compose up -d
 ```
+
+`-v` takes the attachment bytes and the data protection keys with it, which is
+right for a development reset and is the one flag to think about before running
+this against anything you care about.
+
+Attachments live on their own named volume, created and chowned in the image
+(ADR 0014). If a fresh `docker compose up` ever answers an upload with
+*Permission denied*, the volume was created before the image had the directory —
+`docker volume rm couple-os_coupleos-attachments` and bring it up again.
 
 ## Signing in
 

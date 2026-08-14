@@ -20,7 +20,11 @@
             return;
         }
 
-        var text = document.getElementById('Text');
+        // Either surface's input. The shared page has a textarea holding the
+        // whole file; the private thread has the message box. One script,
+        // because where the link goes is the same decision on both — beside what
+        // the person was writing, not at the end of the document.
+        var text = document.getElementById('Text') || document.getElementById('Said');
 
         if (!text) {
             return;

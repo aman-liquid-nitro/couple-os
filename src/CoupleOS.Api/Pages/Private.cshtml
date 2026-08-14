@@ -39,3 +39,25 @@
     <button type="submit" id="send">Send</button>
     <span class="muted htmx-indicator">thinking…</span>
 </form>
+
+@*
+    The same upload as the shared page, and private because this is the private
+    page — the whole of ADR 0009's rule, restated as one argument rather than as
+    a judgment about the file.
+
+    method="post" so Razor injects the antiforgery token, and hx-include so it
+    travels with the file. Without it every upload is a 400 the page reports as
+    nothing at all, which is how this was found the first time.
+*@
+<form id="attach" method="post">
+    <label for="upload">Attach a file</label>
+    <input type="file" name="upload" id="upload"
+           hx-post="/Private?handler=Upload" hx-encoding="multipart/form-data"
+           hx-include="#attach" hx-target="#attach-state" hx-swap="innerHTML"
+           hx-trigger="change" />
+    <span id="attach-state" class="muted"></span>
+</form>
+
+@section Scripts {
+    <script src="~/js/attachments.js" asp-append-version="true"></script>
+}

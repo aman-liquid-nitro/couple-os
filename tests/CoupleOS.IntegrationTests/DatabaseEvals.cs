@@ -1,16 +1,20 @@
 using System.Diagnostics;
 using System.Text.Json;
 using CoupleOS.Application;
+using CoupleOS.Application.Attachments;
 using CoupleOS.Application.AI;
 using CoupleOS.Application.Capture;
 using CoupleOS.Application.Persistence;
 using CoupleOS.Application.Security;
 using CoupleOS.Application.Tools;
+using CoupleOS.Domain.Entities;
 using CoupleOS.Domain.Enums;
 using CoupleOS.Evals;
 using CoupleOS.Infrastructure.DependencyInjection;
 using CoupleOS.Infrastructure.Persistence;
+using CoupleOS.Infrastructure.Storage;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 using Xunit.Abstractions;
@@ -111,6 +115,8 @@ public sealed class DatabaseEvals(ITestOutputHelper output) : IClassFixture<RlsF
         "inference-002" => AnInferredMemoryIsAnsweredAsAGuessAsync(),
         "boundary-003" => AnEmptyResultIsReportedAsEmptyAsync(),
         "dump-001" => AsecondProcessCreatesNothingAsync(),
+        "attach-001" => AreceiptReachesTheRecordItsBlockProducedAsync(),
+        "attach-002" => AprivateAttachmentIsInvisibleToThePartnerAsync(),
 
         // Not a skip. A case can be declared for this harness and have no
         // scenario, and the only acceptable way for that to end is loudly.
@@ -489,6 +495,114 @@ public sealed class DatabaseEvals(ITestOutputHelper output) : IClassFixture<RlsF
         return provider.Calls == 1 ? null : $"The model was called {provider.Calls} times across two runs.";
     }
 
+    /// <summary>
+    /// attach-001 — stored, linked, and never claimed to have been read.
+    ///
+    /// The third assertion is the one worth having. <c>ocr_status</c> is left
+    /// unmapped precisely so nothing in the application can set it (ADR 0014),
+    /// and "nothing can set it" is a claim about code that a query settles.
+    /// </summary>
+    private async Task<string?> AreceiptReachesTheRecordItsBlockProducedAsync()
+    {
+        var token = Unique("acservice");
+
+        await using var services = BuildProvider();
+
+        var upload = await UploadAsync(services, RlsFixture.PartnerD, Visibility.SharedCouple, token + ".jpg");
+
+        if (upload.Attachment is null)
+        {
+            return $"The upload was refused: {upload.Refusal}";
+        }
+
+        var expense = await DispatchAsync(services, RlsFixture.PartnerD, Visibility.SharedCouple, "create_expense",
+            $$"""{"amount":2500,"description":"{{token}} service","paid_by":"me"}""");
+
+        if (expense.EntityId is null)
+        {
+            return $"The expense was not created: {string.Join("; ", expense.Errors ?? [])}";
+        }
+
+        // Parsed the way BlockProcessor parses it rather than by handing the id
+        // over directly. A test that skipped the parse would pass while the
+        // format the file actually carries was wrong — which is the failure this
+        // whole reference format exists to make impossible.
+        var referenced = AttachmentReference.In(
+            token + " service 2500 " +
+            AttachmentReference.Markdown(upload.Attachment.Id, upload.Attachment.Filename));
+
+        if (referenced.Count != 1 || referenced[0] != upload.Attachment.Id)
+        {
+            return "The markdown the upload produced does not parse back to the attachment it names.";
+        }
+
+        await LinkAsync(services, RlsFixture.PartnerD, referenced[0], "expense", expense.EntityId.Value);
+
+        var linked = await QueryAsync(services, RlsFixture.PartnerD, db =>
+            db.AttachmentLinks
+                .Where(l => l.EntityType == "expense" && l.EntityId == expense.EntityId.Value)
+                .ToListAsync());
+
+        if (!linked.Any(l => l.AttachmentId == upload.Attachment.Id))
+        {
+            return "The attachment is not linked to the expense its block produced.";
+        }
+
+        var attachment = await FindAsync(services, RlsFixture.PartnerD, upload.Attachment.Id);
+
+        if (attachment is null)
+        {
+            return "The attachment row is not readable by the couple that uploaded it.";
+        }
+
+        var ocr = await OcrStatusAsync(services, RlsFixture.PartnerD, upload.Attachment.Id);
+
+        return ocr == "not_attempted"
+            ? null
+            : "ocr_status is '" + ocr + "'. V0 does not read images, and a row claiming otherwise is " +
+              "SPEC.md 46's failure with a database column behind it.";
+    }
+
+    /// <summary>
+    /// attach-002 — an attachment inherits the scope of the surface that received
+    /// it, and the partner's query cannot reach it.
+    ///
+    /// Asserted from both sides. "It is not on the page" and "the query cannot
+    /// see it" are different claims, and only the second is a guarantee.
+    /// </summary>
+    private async Task<string?> AprivateAttachmentIsInvisibleToThePartnerAsync()
+    {
+        var token = Unique("tripquote");
+
+        await using var services = BuildProvider();
+
+        var upload = await UploadAsync(services, RlsFixture.PartnerD, Visibility.PrivateUser, token + ".pdf");
+
+        if (upload.Attachment is null)
+        {
+            return $"The upload was refused: {upload.Refusal}";
+        }
+
+        if (upload.Attachment.Visibility != Visibility.PrivateUser ||
+            upload.Attachment.OwnerUserId != RlsFixture.PartnerD)
+        {
+            return "A file uploaded in the private thread was not recorded as that partner's own.";
+        }
+
+        var byAuthor = await FindAsync(services, RlsFixture.PartnerD, upload.Attachment.Id);
+        var byPartner = await FindAsync(services, RlsFixture.PartnerE, upload.Attachment.Id);
+
+        if (byAuthor is null)
+        {
+            return "The uploader cannot see their own attachment, so this case measures a broken " +
+                   "read rather than a working policy.";
+        }
+
+        return byPartner is null
+            ? null
+            : "The partner can read a private attachment through the same call that hides nothing.";
+    }
+
     // ---------------------------------------------------------------- plumbing
 
     private sealed class ScriptedProvider(Func<string, LlmCompletion> script) : ILlmProvider
@@ -505,10 +619,19 @@ public sealed class DatabaseEvals(ITestOutputHelper output) : IClassFixture<RlsF
         }
     }
 
+    /// <summary>
+    /// A temporary attachment root per run, so a case that writes bytes leaves
+    /// nothing behind and cannot read what an earlier run wrote.
+    /// </summary>
+    private static readonly string AttachmentRoot = Path.Combine(
+        Path.GetTempPath(),
+        "coupleos-evals-" + Guid.NewGuid().ToString("N")[..8]);
+
     private static ServiceProvider BuildProvider() =>
         new ServiceCollection()
             .AddCoupleOsInfrastructure(RlsFixture.AppConnectionString)
-            .AddCoupleOsTools()
+            .AddCoupleOsApplication()
+            .AddSingleton(new AttachmentStorageOptions { Root = AttachmentRoot })
             .BuildServiceProvider();
 
     private static AsyncServiceScope BeginRequest(ServiceProvider provider, Guid couple, Guid user)
@@ -581,6 +704,81 @@ public sealed class DatabaseEvals(ITestOutputHelper output) : IClassFixture<RlsF
 
         Assert.True(result.Succeeded, string.Join("; ", result.Errors ?? []));
     }
+
+    private static async Task<AttachmentUpload> UploadAsync(
+        ServiceProvider provider,
+        Guid user,
+        Visibility visibility,
+        string filename)
+    {
+        await using var request = BeginRequest(provider, RlsFixture.Couple3, user);
+
+        return await request.ServiceProvider
+            .GetRequiredService<IAttachmentIntake>()
+            .ReceiveAsync(
+                filename,
+                "image/jpeg",
+                new MemoryStream([9, 8, 7, 6, 5]),
+                visibility,
+                dumpFileId: null);
+    }
+
+    private static async Task LinkAsync(
+        ServiceProvider provider,
+        Guid user,
+        Guid attachmentId,
+        string entityType,
+        Guid entityId)
+    {
+        await using var request = BeginRequest(provider, RlsFixture.Couple3, user);
+
+        var unitOfWork = request.ServiceProvider.GetRequiredService<IScopedUnitOfWork>();
+        var attachments = request.ServiceProvider.GetRequiredService<IAttachments>();
+
+        await using var transaction = await unitOfWork.BeginAsync();
+
+        await attachments.LinkAsync(attachmentId, [new AttachmentTarget(entityType, entityId)]);
+
+        await transaction.CommitAsync();
+    }
+
+    private static async Task<Attachment?> FindAsync(ServiceProvider provider, Guid user, Guid attachmentId)
+    {
+        await using var request = BeginRequest(provider, RlsFixture.Couple3, user);
+
+        var unitOfWork = request.ServiceProvider.GetRequiredService<IScopedUnitOfWork>();
+        var attachments = request.ServiceProvider.GetRequiredService<IAttachments>();
+
+        await using var transaction = await unitOfWork.BeginAsync();
+
+        var found = await attachments.FindAsync(attachmentId);
+
+        await transaction.CommitAsync();
+
+        return found;
+    }
+
+    /// <summary>
+    /// Read in SQL, because the column is deliberately unmapped — which is the
+    /// property under test. Mapping it so a test could read it would remove the
+    /// guarantee the test exists to check.
+    /// </summary>
+    private static Task<string> OcrStatusAsync(ServiceProvider provider, Guid user, Guid attachmentId) =>
+        QueryAsync(provider, user, async db =>
+        {
+            var connection = db.Database.GetDbConnection();
+
+            await using var command = connection.CreateCommand();
+            command.CommandText = "SELECT ocr_status FROM attachments WHERE id = @id";
+            command.Transaction = db.Database.CurrentTransaction?.GetDbTransaction();
+
+            var parameter = command.CreateParameter();
+            parameter.ParameterName = "id";
+            parameter.Value = attachmentId;
+            command.Parameters.Add(parameter);
+
+            return (string)(await command.ExecuteScalarAsync())!;
+        });
 
     private static async Task<string> SearchAsync(
         ServiceProvider provider,
