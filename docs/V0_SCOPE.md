@@ -142,8 +142,9 @@ V0 is done when all of the following are true.
 Each box names what asserts it, because a ticked box with no named assertion is
 an opinion. This list went four milestones without being touched — it was last
 edited at M1, and the two boxes that were ticked were the two true then. What
-follows is the reconciliation against what the suites actually assert; **twelve
-of fourteen hold, and the two that do not are stated rather than rounded up.**
+follows is the reconciliation against what the suites actually assert; it came
+out twelve of fourteen, and building the corpus the twelfth asked for made it
+**thirteen. The one that does not hold is stated rather than rounded up.**
 
 - [x] Two people sign in via magic link and form a couple
 - [x] Both partners can write to `shared.md` and each sees the other's captures — `SharedFileEditorTests`: PartnerA writes, PartnerB reads it back in a fresh scope against real Postgres with RLS on, and a save against a stale version writes nothing
@@ -156,7 +157,7 @@ of fourteen hold, and the two that do not are stated rather than rounded up.**
 - [x] A private memory is never returned to the partner — verified by the adversarial cases in the eval set, not by inspection — `DatabaseEvals` runs `privacy-003`, `privacy-005`, `injection-001` and `injection-004` through the real query layer and asserts absence. The rest of the adversarial cases run on `extraction` only, so they judge what the model *proposed*, not what the database *returned*; the four above are the ones that close it
 - [x] No tool call anywhere can set `visibility`; it is always inherited from the surface — `ToolCatalogueTests.No_tool_schema_offers_the_model_a_word_for_whose_data_it_is_writing` (no schema may name `visibility`, `couple_id`, `owner_user_id` or `user_id`) and `ToolDispatcherTests`, which fails a call carrying `visibility` whether or not a schema declared it. Two assertions because a schema can be edited and a dispatcher rule cannot be edited by accident
 - [x] A failed tool call never produces success language in the response — `PrivateThreadTests` for the three shapes on the private surface (all refused, nothing at all, half succeeded), `multi-003`'s `response_must_not_claim_success_for` for the shared one. Per-scenario, not a scan of every render path
-- [ ] `search_memory` returns relevant results lexically over a seeded corpus of ≥100 memories — **not asserted, and not weakly: the corpus does not exist.** Every search test writes one or two rows with unique tokens, which proves the query matches and proves nothing about ranking among neighbours. STATUS debt 47
+- [x] `search_memory` returns relevant results lexically over a seeded corpus of ≥100 memories — `MemoryCorpusFixture` seeds 104 clustered memories for a couple of its own and refuses to seed fewer; `MemorySearchRankingTests` asserts what comes back *first*. Ticked with two findings attached, because the corpus was built to look and it found something: STATUS debt 50 (the blend rewards brevity) and debt 51 (the trigram branch never fires). Both are characterised by passing tests named for what happens
 - [ ] Every AI mutation appears in `ai_actions` with input, output and outcome — **two of three.** `Arguments` is the input and `Outcome` is the outcome, both asserted by `ToolPipelineTests`. The `result` jsonb column has no property on `AiAction` at all, so no output is ever stored — `entity_id` points at what was created, which is a pointer and not a record of what the tool returned. STATUS debt 48
 - [x] The full stack runs from a clean clone with `docker compose up` and one `.env` file
 

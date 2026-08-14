@@ -282,8 +282,10 @@ and a Process links it to every record its block produced.
 totals anywhere. **All five milestones are met.** V0_SCOPE's done-checklist was
 then reconciled line by line against what the suites assert, and came out twelve
 of fourteen: no seeded memory corpus (STATUS debt 47) and no stored tool output
-in `ai_actions` (debt 48). Neither blocks a week of use and both are named rather
-than rounded up. What V0 is not is validated — that is what the week is for, and
+in `ai_actions` (debt 48). The corpus was then built — 104 memories, and the
+first thing it did was find two ranking defects nobody could have seen on a
+corpus of two (debts 50 and 51). Thirteen of fourteen, and what is left is named
+rather than rounded up. What V0 is not is validated — that is what the week is for, and
 the bar it is measured against is in V0_SCOPE.md rather than here.
 
 ---
