@@ -18,6 +18,16 @@ Dockerfile      text eol=lf
 *.Dockerfile    text eol=lf
 .dockerignore   text eol=lf
 
+# C# keeps LF in the working tree as well as in the repository, which text=auto
+# alone does not do — it stores LF and hands Windows CRLF on checkout. That is
+# invisible until a test compares a raw string literal against something the
+# code built with "\n": the literal carries the checkout's line endings and the
+# code does not. Fourteen FileRewriterTests fail that way on any Windows clone,
+# and did, while passing for everyone whose working copy predated the checkout
+# that converted them. Observed 2026-08-14. The alternative — normalising inside
+# every assertion — makes each test carry a workaround for a repository setting.
+*.cs   text eol=lf
+
 # Windows-native scripts keep CRLF.
 *.cmd  text eol=crlf
 *.bat  text eol=crlf
